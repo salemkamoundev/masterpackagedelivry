@@ -69,8 +69,9 @@ export class LoginComponent {
   onSubmit() {
     if (this.loginForm.valid) {
       const { email, password } = this.loginForm.value;
+      // FIX: Ensure the subscription handles the error properly for debugging
       this.authService.login(email!, password!).subscribe({
-        next: () => this.router.navigate(['/']),
+        next: () => this.router.navigate(['/admin']), // Redirection vers /admin
         error: (err) => {
           console.error('Login Error:', err);
           alert('Erreur de connexion: ' + err.message);
@@ -81,10 +82,7 @@ export class LoginComponent {
 
   loginWithGoogle() {
     this.authService.loginGoogle().subscribe({
-      next: () => {
-        alert("here")
-        this.router.navigate(['/admin'])
-      },
+      next: () => this.router.navigate(['/admin']), // Redirection vers /admin
       error: (err) => {
          console.error('Google Auth Error:', err);
          alert('Erreur Google: ' + err.message);
