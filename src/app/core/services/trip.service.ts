@@ -1,11 +1,18 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, collectionData } from '@angular/fire/firestore';
+import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
 export interface Parcel {
   description: string;
   weight: number;
   recipient: string;
+}
+
+export interface GeoLocation {
+  lat: number;
+  lng: number;
+  city: string; // "Supposition de la ville"
+  lastUpdate: string;
 }
 
 export interface Trip {
@@ -16,6 +23,8 @@ export interface Trip {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   driverId: string;
   carId: string;
+  company: string; // Pour le filtrage par société
+  currentLocation?: GeoLocation; // Position approximative
   parcels: Parcel[];
 }
 
@@ -32,5 +41,19 @@ export class TripService {
 
   createTrip(trip: Trip) {
     return addDoc(this.tripsCollection, trip);
+  }
+
+  deleteTrip(tripId: string) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return deleteDoc(tripRef);
+  }
+
+  // Simulation de la mise à jour de position (pour la démo)
+  updatePosition(tripId: string, location: GeoLocation) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, { 
+      currentLocation: location,
+      status: 'IN_PROGRESS'
+    });
   }
 }
