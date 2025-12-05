@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Mise à jour du module Trajets (Multi-sociétés, Géolocalisation & Google Maps)..."
+echo "🚀 Mise à jour du module Trajets (Logique de suivi basée sur l'heure)..."
 
-# 1. Mise à jour du Service Trip (Ajout Company + Location + Delete)
-echo "📦 Mise à jour de TripService..."
+# 1. Mise à jour du Service Trip (Pas de changement dans les interfaces du service)
+echo "📦 Mise à jour de TripService (Contenu du fichier conservé)..."
 cat <<EOF > src/app/core/services/trip.service.ts
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc } from '@angular/fire/firestore';
@@ -56,24 +56,24 @@ export class TripService {
     return deleteDoc(tripRef);
   }
 
-  // Simulation de la mise à jour de position (pour la démo)
-  updatePosition(tripId: string, location: GeoLocation) {
+  // Mise à jour de position
+  updatePosition(tripId: string, location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED') {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { 
       currentLocation: location,
-      status: 'IN_PROGRESS'
+      status: status
     });
   }
 }
 EOF
 
-# 2. Mise à jour du Composant TripManager (Filtres & Map & Delete)
-echo "🗺️ Mise à jour de TripManagerComponent..."
+# 2. Mise à jour du Composant TripManager (Logique de simulation basée sur le temps)
+echo "🗺️ Mise à jour de TripManagerComponent (Logique de temps)..."
 cat <<EOF > src/app/features/admin/trips/trip-manager.component.ts
 import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray } from '@angular/forms';
-import { TripService, Trip } from '../../../core/services/trip.service';
+import { TripService, Trip, GeoLocation } from '../../../core/services/trip.service';
 import { CarService } from '../../../core/services/car.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -126,15 +126,15 @@ import { map } from 'rxjs/operators';
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                <div>
                   <label class="block text-sm font-medium text-gray-700">Départ (Ville)</label>
-                  <input formControlName="departure" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Ex: Paris">
+                  <input formControlName="departure" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Ex: Sfax">
                </div>
                <div>
                   <label class="block text-sm font-medium text-gray-700">Destination (Ville)</label>
-                  <input formControlName="destination" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Ex: Lyon">
+                  <input formControlName="destination" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Ex: Tunis">
                </div>
                <div>
-                  <label class="block text-sm font-medium text-gray-700">Date de départ</label>
-                  <input formControlName="date" type="date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
+                  <label class="block text-sm font-medium text-gray-700">Date et Heure de départ</label>
+                  <input formControlName="date" type="datetime-local" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2">
                </div>
                <div>
                   <label class="block text-sm font-medium text-gray-700">Véhicule</label>
@@ -214,33 +214,36 @@ import { map } from 'rxjs/operators';
                               
                               <!-- Position Approximative (Si en cours) -->
                               @if (trip.status === 'IN_PROGRESS' && trip.currentLocation) {
-                                 <div class="flex items-center text-xs text-gray-600 mt-1 animate-pulse">
-                                    <span class="mr-1">📡</span> 
-                                    Actuellement vers : <span class="font-bold ml-1">{{ trip.currentLocation.city }}</span>
+                                 <div class="flex flex-col mt-1">
+                                    <div class="flex items-center text-xs text-gray-600 animate-pulse">
+                                       <span class="mr-1">📡</span> 
+                                       Actuellement vers : <span class="font-bold ml-1">{{ trip.currentLocation.city }}</span>
+                                    </div>
+                                    <div class="text-[10px] text-gray-400 font-mono mt-0.5 ml-5">
+                                       GPS: {{ trip.currentLocation.lat | number:'1.4-4' }}, {{ trip.currentLocation.lng | number:'1.4-4' }}
+                                    </div>
                                  </div>
                               }
                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                           <div class="text-sm text-gray-900">{{ trip.date | date:'shortDate' }}</div>
+                           <!-- Affichage de la date ET de l'heure -->
+                           <div class="text-sm text-gray-900">{{ trip.date | date:'dd/MM/yyyy HH:mm' }}</div>
                            <div class="text-xs text-gray-500">{{ trip.parcels.length }} Colis chargé(s)</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                            <div class="flex justify-end gap-2">
                               <!-- BOUTON GOOGLE MAPS INTELLIGENT -->
-                              <a [href]="getGoogleMapsUrl(trip)" target="_blank" 
+                              <!-- On utilise handleTrackClick qui gère la simulation/calcul et l'ouverture -->
+                              <button 
+                                 (click)="handleTrackClick(trip, \$event)"
                                  class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                                  title="Ouvrir dans Google Maps">
                                  <span class="mr-1.5 text-red-500 text-sm">📍</span> 
-                                 {{ trip.status === 'IN_PROGRESS' ? 'Suivre' : 'Voir Trajet' }}
-                              </a>
+                                 {{ trip.status === 'PENDING' ? 'Voir Trajet' : 'Suivre' }}
+                              </button>
                               
-                              <!-- Bouton Simuler (Pour la démo) -->
-                              @if (trip.status !== 'COMPLETED') {
-                                 <button (click)="simulateMovement(trip)" class="text-indigo-600 hover:text-indigo-900 text-xs underline">
-                                    Simuler Avancée
-                                 </button>
-                              }
+                              <!-- Bouton Simuler Avancée SUPPRIMÉ -->
                               
                               <!-- BOUTON SUPPRIMER -->
                               <button (click)="deleteTrip(trip)" class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-1.5 rounded transition" title="Supprimer le trajet">
@@ -272,6 +275,11 @@ export class TripManagerComponent {
   
   showForm = false;
   
+  // Coordonnées Sfax -> Tunis pour l'interpolation
+  private readonly SFAX_COORDS = { lat: 34.74, lng: 10.76, city: 'Sfax' };
+  private readonly TUNIS_COORDS = { lat: 36.80, lng: 10.18, city: 'Tunis' };
+  private readonly ESTIMATED_DURATION_MS = 5 * 60 * 60 * 1000; // 5 heures en millisecondes
+
   // Data Streams
   cars$ = this.carService.getCars();
   private rawTrips = toSignal(this.tripService.getTrips(), { initialValue: [] });
@@ -291,11 +299,10 @@ export class TripManagerComponent {
   });
 
   // Filter Logic (Signal Computed)
-  // Combine les filtres et les données brutes
   filteredTrips = computed(() => {
     const trips = this.rawTrips();
     const companyFilter = this.companyFilterControl.value;
-    const statusFilter = this.inProgressFilterControl.value; // true/false
+    const statusFilter = this.inProgressFilterControl.value;
 
     return trips.filter(t => {
        const matchesCompany = companyFilter ? t.company === companyFilter : true;
@@ -305,17 +312,10 @@ export class TripManagerComponent {
   });
 
   constructor() {
-     // Réagir aux changements des contrôles de filtre pour déclencher la détection de changement si besoin
-     // Angular Signals gère ça via les templates, mais ici nous utilisons computed() qui est clean.
-     // Pour que computed() se mette à jour, il faut que ses dépendances soient des signaux.
-     // Petite astuce : on convertit les valueChanges en signal si on veut du pur réactif,
-     // mais ici Angular change detection standard suffira car les controls sont liés via [formControl].
-     // Correction pour la réactivité immédiate : 
      this.companyFilterControl.valueChanges.subscribe(() => this.refreshSignal());
      this.inProgressFilterControl.valueChanges.subscribe(() => this.refreshSignal());
   }
   
-  // Hack simple pour forcer le re-calcul du computed si on n'utilise pas toSignal sur les inputs
   private refreshSignal = signal(0); 
 
   // Accesseurs Formulaire
@@ -336,9 +336,7 @@ export class TripManagerComponent {
   async createTrip() {
     if (this.tripForm.valid) {
       const user = this.currentUser();
-      // On récupère le profil complet pour avoir la "company" de l'admin qui crée
-      // Pour simplifier ici, on va mocker ou supposer une company par défaut si non trouvée
-      const company = 'DHL'; // Idéalement: await userService.getUserProfile(user.uid).company
+      const company = 'DHL'; // Mock Company
 
       const formVal = this.tripForm.value;
       const newTrip: Trip = {
@@ -347,7 +345,7 @@ export class TripManagerComponent {
         date: formVal.date!,
         carId: formVal.carId!,
         driverId: 'PENDING', 
-        company: company, // Assignation auto
+        company: company,
         status: 'PENDING',
         parcels: formVal.parcels as any[]
       };
@@ -366,6 +364,81 @@ export class TripManagerComponent {
     }
   }
 
+  // --- NOUVELLE FONCTION INTELIGENTE DE TRACKING ---
+  async handleTrackClick(trip: Trip, event: Event) {
+    event.preventDefault(); 
+
+    // 1. Si le trajet est terminé, on ouvre la carte (vue finale)
+    if (trip.status === 'COMPLETED') {
+        const url = this.getGoogleMapsUrl(trip);
+        window.open(url, '_blank');
+        return;
+    }
+
+    // 2. Si le trajet est en cours ou en attente, on calcule la position
+    if (trip.status === 'PENDING' || trip.status === 'IN_PROGRESS') {
+        
+        // Calculer la nouvelle position basée sur l'heure
+        const newLocation = this.calculateMovement(trip);
+        
+        // Si le trajet est terminé (car temps écoulé > 100%)
+        if (newLocation.status === 'COMPLETED') {
+             await this.tripService.updatePosition(trip.uid!, newLocation.location, 'COMPLETED');
+             alert(`Livraison terminée à ${newLocation.location.city} !`);
+        } else {
+             await this.tripService.updatePosition(trip.uid!, newLocation.location, 'IN_PROGRESS');
+             // Mise à jour de l'objet trip localement pour le feedback immédiat
+             trip.currentLocation = newLocation.location;
+             trip.status = 'IN_PROGRESS';
+        }
+        
+        // Ouvrir la carte avec la position mise à jour (nécessite le rawTrips signal pour rafraîchir)
+        const url = this.getGoogleMapsUrl(trip);
+        window.open(url, '_blank');
+    }
+  }
+
+  // --- LOGIQUE DE CALCUL DE POSITION (Interpolation linéaire) ---
+  calculateMovement(trip: Trip): { location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED' } {
+    const departureTime = new Date(trip.date).getTime();
+    const currentTime = Date.now();
+    const elapsedTime = currentTime - departureTime;
+
+    // Calculer le pourcentage d'avancement (clamped entre 0 et 1)
+    let progress = Math.min(1, Math.max(0, elapsedTime / this.ESTIMATED_DURATION_MS));
+    
+    // Déterminer la ville de départ et d'arrivée (simplification Sfax -> Tunis)
+    const start = this.SFAX_COORDS;
+    const end = this.TUNIS_COORDS;
+
+    // Calcul par interpolation linéaire (LERP)
+    const currentLat = start.lat + (end.lat - start.lat) * progress;
+    const currentLng = start.lng + (end.lng - start.lng) * progress;
+
+    let status: 'IN_PROGRESS' | 'COMPLETED' = 'IN_PROGRESS';
+    let currentCity = 'Sur la route...';
+    
+    if (progress >= 1) {
+        status = 'COMPLETED';
+        currentCity = end.city; // Tunis
+    } else if (progress > 0) {
+        currentCity = 'En cours (Estimation)';
+    } else {
+        currentCity = start.city; // Sfax
+    }
+
+    return {
+        location: {
+            lat: currentLat,
+            lng: currentLng,
+            city: currentCity,
+            lastUpdate: new Date().toISOString()
+        },
+        status: status
+    };
+  }
+
+
   // --- LOGIQUE GOOGLE MAPS ---
   getGoogleMapsUrl(trip: Trip): string {
     const baseUrl = 'https://www.google.com/maps/dir/?api=1';
@@ -373,34 +446,18 @@ export class TripManagerComponent {
     const dest = encodeURIComponent(trip.destination);
     
     let url = \`\${baseUrl}&origin=\${origin}&destination=\${dest}&travelmode=driving\`;
-
-    // Si on a une position actuelle approximative, on l'ajoute comme waypoint
-    if (trip.status === 'IN_PROGRESS' && trip.currentLocation) {
+    
+    // Si la position est disponible, on l'utilise pour forcer le marqueur
+    if (trip.currentLocation) {
        const waypoint = \`\${trip.currentLocation.lat},\${trip.currentLocation.lng}\`;
-       url += \`&waypoints=\${waypoint}\`;
+       
+       // Nouvelle destination = position actuelle (force le marqueur)
+       url = \`\${baseUrl}&origin=\${origin}&destination=\${waypoint}&travelmode=driving\`;
+       // Waypoint final = destination réelle
+       url += \`&waypoints=\${dest}\`;
     }
 
     return url;
-  }
-
-  // --- SIMULATION POUR LA DÉMO ---
-  simulateMovement(trip: Trip) {
-     // Simule une avancée vers une ville intermédiaire aléatoire
-     const cities = ['Orléans', 'Tours', 'Dijon', 'Macon', 'Valence'];
-     const randomCity = cities[Math.floor(Math.random() * cities.length)];
-     
-     // Coordonnées bidons pour l'exemple (Centre France)
-     const lat = 46 + Math.random(); 
-     const lng = 2 + Math.random();
-
-     this.tripService.updatePosition(trip.uid!, {
-        lat: lat,
-        lng: lng,
-        city: randomCity, // Supposition de la ville
-        lastUpdate: new Date().toISOString()
-     });
-     
-     alert(\`Position mise à jour : \${randomCity}. Le statut passe en "En cours". Vérifiez le bouton Maps !\`);
   }
 }
 EOF

@@ -48,12 +48,12 @@ export class TripService {
     return deleteDoc(tripRef);
   }
 
-  // Simulation de la mise à jour de position (pour la démo)
-  updatePosition(tripId: string, location: GeoLocation) {
+  // Mise à jour de position
+  updatePosition(tripId: string, location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED') {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { 
       currentLocation: location,
-      status: 'IN_PROGRESS'
+      status: status
     });
   }
 }
