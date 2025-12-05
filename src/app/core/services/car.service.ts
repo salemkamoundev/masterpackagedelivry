@@ -8,6 +8,7 @@ export interface Car {
   plate: string;
   status: 'AVAILABLE' | 'MAINTENANCE' | 'BUSY';
   assignedDriverId?: string | null; // ID du chauffeur affecté
+  company: string; // NOUVEAU: Société propriétaire du véhicule
 }
 
 @Injectable({
@@ -22,7 +23,13 @@ export class CarService {
   }
 
   addCar(car: Car) {
+    // Le champ 'company' est inclus dans l'objet 'car' passé en argument
     return addDoc(this.carsCollection, car);
+  }
+
+  updateCar(carId: string, data: Partial<Car>) {
+    const carRef = doc(this.firestore, 'cars', carId);
+    return updateDoc(carRef, data);
   }
 
   assignDriver(carId: string, driverId: string | null) {

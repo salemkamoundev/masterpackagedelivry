@@ -1,9 +1,10 @@
 import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray } from '@angular/forms';
-import { TripService, Trip, GeoLocation } from '../../../core/services/trip.service';
+import { TripService, Trip, GeoLocation } from '../../../core/services/trip.service'; // FIX: Import GeoLocation ici
 import { CarService } from '../../../core/services/car.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { CompanyService } from '../../../core/services/company.service'; 
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 
@@ -30,12 +31,12 @@ import { map } from 'rxjs/operators';
       <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center">
          <div class="flex-1 w-full">
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrer par Société</label>
+            <!-- SOCIÉTÉS CHARGÉES DEPUIS FIREBASE -->
             <select [formControl]="companyFilterControl" class="w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2 border">
                <option value="">Toutes les sociétés</option>
-               <option value="DHL">DHL</option>
-               <option value="FedEx">FedEx</option>
-               <option value="UPS">UPS</option>
-               <option value="Interne">Interne</option>
+               @for (company of activeCompanies(); track company.uid) {
+                  <option [value]="company.name">{{ company.name }}</option>
+               }
             </select>
          </div>
          <div class="flex-1 w-full">
@@ -162,7 +163,6 @@ import { map } from 'rxjs/operators';
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                            <div class="flex justify-end gap-2">
                               <!-- BOUTON GOOGLE MAPS INTELLIGENT -->
-                              <!-- On utilise handleTrackClick qui gère la simulation/calcul et l'ouverture -->
                               <button 
                                  (click)="handleTrackClick(trip, $event)"
                                  class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -170,8 +170,6 @@ import { map } from 'rxjs/operators';
                                  <span class="mr-1.5 text-red-500 text-sm">📍</span> 
                                  {{ trip.status === 'PENDING' ? 'Voir Trajet' : 'Suivre' }}
                               </button>
-                              
-                              <!-- Bouton Simuler Avancée SUPPRIMÉ -->
                               
                               <!-- BOUTON SUPPRIMER -->
                               <button (click)="deleteTrip(trip)" class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-1.5 rounded transition" title="Supprimer le trajet">
@@ -200,6 +198,7 @@ export class TripManagerComponent {
   private tripService = inject(TripService);
   private carService = inject(CarService);
   private authService = inject(AuthService);
+  private companyService = inject(CompanyService); // INJECTION
   
   showForm = false;
   
@@ -212,6 +211,9 @@ export class TripManagerComponent {
   cars$ = this.carService.getCars();
   private rawTrips = toSignal(this.tripService.getTrips(), { initialValue: [] });
   private currentUser = toSignal(this.authService.user$);
+
+  // Signal pour la liste des sociétés actives
+  activeCompanies = this.companyService.activeCompanies;
 
   // Filters Controls
   companyFilterControl = this.fb.control('');
@@ -230,7 +232,7 @@ export class TripManagerComponent {
   filteredTrips = computed(() => {
     const trips = this.rawTrips();
     const companyFilter = this.companyFilterControl.value;
-    const statusFilter = this.inProgressFilterControl.value;
+    const statusFilter = this.inProgressFilterControl.value; // true/false
 
     return trips.filter(t => {
        const matchesCompany = companyFilter ? t.company === companyFilter : true;
@@ -263,9 +265,9 @@ export class TripManagerComponent {
 
   async createTrip() {
     if (this.tripForm.valid) {
-      const user = this.currentUser();
-      const company = 'DHL'; // Mock Company
-
+      // Récupérer le nom de la société à partir du profil de l'utilisateur connecté ou du choix (simplification)
+      const company = 'DHL'; // NOTE: Remplacer par la logique de récupération de la société de l'admin
+      
       const formVal = this.tripForm.value;
       const newTrip: Trip = {
         departure: formVal.departure!,
@@ -273,7 +275,7 @@ export class TripManagerComponent {
         date: formVal.date!,
         carId: formVal.carId!,
         driverId: 'PENDING', 
-        company: company,
+        company: company, // Assignation auto
         status: 'PENDING',
         parcels: formVal.parcels as any[]
       };
@@ -294,33 +296,30 @@ export class TripManagerComponent {
 
   // --- NOUVELLE FONCTION INTELIGENTE DE TRACKING ---
   async handleTrackClick(trip: Trip, event: Event) {
-    event.preventDefault(); 
-
-    // 1. Si le trajet est terminé, on ouvre la carte (vue finale)
-    if (trip.status === 'COMPLETED') {
-        const url = this.getGoogleMapsUrl(trip);
-        window.open(url, '_blank');
-        return;
-    }
-
-    // 2. Si le trajet est en cours ou en attente, on calcule la position
-    if (trip.status === 'PENDING' || trip.status === 'IN_PROGRESS') {
+    // Si le trajet n'est pas terminé, on calcule la position
+    if (trip.status !== 'COMPLETED') {
         
         // Calculer la nouvelle position basée sur l'heure
-        const newLocation = this.calculateMovement(trip);
+        const { location, status } = this.calculateMovement(trip);
         
         // Si le trajet est terminé (car temps écoulé > 100%)
-        if (newLocation.status === 'COMPLETED') {
-             await this.tripService.updatePosition(trip.uid!, newLocation.location, 'COMPLETED');
-             alert();
+        if (status === 'COMPLETED') {
+             await this.tripService.updatePosition(trip.uid!, location, 'COMPLETED');
+             alert(`Livraison terminée à ${location.city} !`);
         } else {
-             await this.tripService.updatePosition(trip.uid!, newLocation.location, 'IN_PROGRESS');
-             // Mise à jour de l'objet trip localement pour le feedback immédiat
-             trip.currentLocation = newLocation.location;
+             // Mise à jour de la position dans Firestore
+             await this.tripService.updatePosition(trip.uid!, location, 'IN_PROGRESS');
+             
+             // Mise à jour de l'objet trip localement (pour le feedback immédiat)
+             trip.currentLocation = location;
              trip.status = 'IN_PROGRESS';
         }
         
-        // Ouvrir la carte avec la position mise à jour (nécessite le rawTrips signal pour rafraîchir)
+        // Ouvrir la carte avec la position mise à jour
+        const url = this.getGoogleMapsUrl(trip);
+        window.open(url, '_blank');
+    } else {
+        // Le trajet est COMPLETED, on ouvre la vue finale
         const url = this.getGoogleMapsUrl(trip);
         window.open(url, '_blank');
     }
@@ -350,6 +349,8 @@ export class TripManagerComponent {
         status = 'COMPLETED';
         currentCity = end.city; // Tunis
     } else if (progress > 0) {
+        // Pour déterminer la ville intermédiaire, on pourrait utiliser des seuils ou une API de géocodage,
+        // mais pour la démo, on utilise une simple étiquette.
         currentCity = 'En cours (Estimation)';
     } else {
         currentCity = start.city; // Sfax

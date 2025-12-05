@@ -4,6 +4,7 @@ import { UserListComponent } from './users/user-list.component';
 import { AdminHomeComponent } from './home/admin-home.component';
 import { CarManagerComponent } from './cars/car-manager.component';
 import { TripManagerComponent } from './trips/trip-manager.component';
+import { CompanyManagerComponent } from './companies/company-manager.component'; // NOUVEL IMPORT
 
 export const ADMIN_ROUTES: Routes = [
   {
@@ -30,7 +31,12 @@ export const ADMIN_ROUTES: Routes = [
         component: TripManagerComponent,
         title: 'Administration - Trajets'
       },
-      // Redirection Drivers vers Cars pour l'instant ou liste users filtrée
+      { 
+        path: 'companies', // NOUVELLE ROUTE
+        component: CompanyManagerComponent,
+        title: 'Administration - Sociétés'
+      },
+      // Redirection Drivers vers Users
       { 
         path: 'drivers', 
         redirectTo: 'users' 

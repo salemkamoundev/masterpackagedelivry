@@ -2,6 +2,9 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { switchMap, map } from 'rxjs/operators';
+import { of } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -47,7 +50,6 @@ import { AuthService } from '../../../core/auth/auth.service';
              <span class="font-medium">Utilisateurs</span>
           </a>
 
-          <!-- LIEN MIS À JOUR: TRAJETS -->
           <a routerLink="/admin/trips" routerLinkActive="bg-indigo-600 text-white shadow-md shadow-indigo-900/20"
              (click)="toggleMobileMenu()"
              class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all group mb-1 cursor-pointer">
@@ -61,23 +63,39 @@ import { AuthService } from '../../../core/auth/auth.service';
              <span class="mr-3 text-xl opacity-75 group-hover:opacity-100">🚚</span>
              <span class="font-medium">Véhicules</span>
           </a>
-
-          <!-- NOUVEAU BOUTON DÉCONNEXION DANS LE MENU -->
+          
+          <!-- LIEN AJOUTÉ POUR LA GESTION DES SOCIÉTÉS -->
+          <a routerLink="/admin/companies" routerLinkActive="bg-indigo-600 text-white shadow-md shadow-indigo-900/20"
+             (click)="toggleMobileMenu()"
+             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all group mb-1 cursor-pointer">
+             <span class="mr-3 text-xl opacity-75 group-hover:opacity-100">🏢</span>
+             <span class="font-medium">Sociétés</span>
+          </a>
+          
+          <!-- BOUTON DÉCONNEXION DANS LE MENU -->
            <button (click)="logout()" class="w-full flex items-center px-3 py-2.5 rounded-lg text-red-400 hover:bg-slate-800 hover:text-red-300 transition-all group mb-1 cursor-pointer mt-4 border-t border-slate-800 pt-4">
              <span class="mr-3 text-xl opacity-75 group-hover:opacity-100">🚪</span>
              <span class="font-medium">Déconnexion</span>
            </button>
         </nav>
 
-        <!-- User Profile -->
+        <!-- User Profile DYNAMIQUE -->
         <div class="p-4 border-t border-slate-800 bg-slate-950/50">
-           <div class="flex items-center gap-3">
-              <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700">A</div>
-              <div>
-                 <p class="text-sm font-medium text-white">Admin</p>
-                 <p class="text-xs text-indigo-300">Super Admin</p>
-              </div>
-           </div>
+           @if (userProfileSignal(); as profile) {
+               <div class="flex items-center gap-3">
+                  <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700 text-lg">
+                     {{ profile.email.charAt(0).toUpperCase() }}
+                  </div>
+                  <div>
+                     <p class="text-sm font-medium text-white">{{ profile.email }}</p>
+                     <p class="text-xs text-indigo-300">{{ profile.role }} | {{ profile.company }}</p>
+                  </div>
+               </div>
+           } @else {
+               <div class="flex items-center gap-3">
+                   <p class="text-sm text-gray-400">Chargement du profil...</p>
+               </div>
+           }
         </div>
       </aside>
 
@@ -137,6 +155,19 @@ import { AuthService } from '../../../core/auth/auth.service';
 export class AdminDashboardComponent {
   private authService = inject(AuthService);
   isMobileMenuOpen = false;
+
+  // Récupération du profil utilisateur via RxJS et conversion en Signal
+  userProfileSignal = toSignal(
+    this.authService.user$.pipe(
+      switchMap(user => {
+        if (user && user.uid) {
+          return this.authService.getUserProfile(user.uid);
+        }
+        return of(null); // Retourne null si non authentifié ou en attente
+      })
+    ),
+    { initialValue: null }
+  );
 
   toggleMobileMenu() {
     this.isMobileMenuOpen = !this.isMobileMenuOpen;
