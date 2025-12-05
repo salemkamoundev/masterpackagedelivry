@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc } from '@angular/fire/firestore';
+import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc, arrayUnion } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
 export interface Parcel {
@@ -11,8 +11,17 @@ export interface Parcel {
 export interface GeoLocation {
   lat: number;
   lng: number;
-  city: string; // "Supposition de la ville"
+  city: string;
   lastUpdate: string;
+}
+
+export interface TripRequest {
+  type: 'PARCEL' | 'PASSENGER';
+  description?: string; // Optionnel si c'est des colis
+  parcels?: Parcel[];   // Liste des colis pour la demande
+  requesterName: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
+  createdAt: string;
 }
 
 export interface Trip {
@@ -23,9 +32,10 @@ export interface Trip {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   driverId: string;
   carId: string;
-  company: string; // Pour le filtrage par société
-  currentLocation?: GeoLocation; // Position approximative
+  company: string;
+  currentLocation?: GeoLocation;
   parcels: Parcel[];
+  extraRequests?: TripRequest[]; // Nouvelles demandes (Colis ou Passager)
 }
 
 @Injectable({
@@ -48,12 +58,19 @@ export class TripService {
     return deleteDoc(tripRef);
   }
 
-  // Mise à jour de position
   updatePosition(tripId: string, location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED') {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { 
       currentLocation: location,
       status: status
+    });
+  }
+
+  // Ajouter une demande supplémentaire (Colis ou Passager)
+  addRequest(tripId: string, request: TripRequest) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, {
+      extraRequests: arrayUnion(request)
     });
   }
 }

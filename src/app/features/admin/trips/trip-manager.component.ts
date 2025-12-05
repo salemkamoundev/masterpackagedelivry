@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray } from '@angular/forms';
-import { TripService, Trip, GeoLocation } from '../../../core/services/trip.service'; // FIX: Import GeoLocation ici
+import { TripService, Trip, GeoLocation, TripRequest } from '../../../core/services/trip.service';
 import { CarService } from '../../../core/services/car.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CompanyService } from '../../../core/services/company.service'; 
@@ -31,7 +31,6 @@ import { map } from 'rxjs/operators';
       <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col md:flex-row gap-4 items-center">
          <div class="flex-1 w-full">
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Filtrer par Société</label>
-            <!-- SOCIÉTÉS CHARGÉES DEPUIS FIREBASE -->
             <select [formControl]="companyFilterControl" class="w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm p-2 border">
                <option value="">Toutes les sociétés</option>
                @for (company of activeCompanies(); track company.uid) {
@@ -156,23 +155,33 @@ import { map } from 'rxjs/operators';
                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                           <!-- Affichage de la date ET de l'heure -->
                            <div class="text-sm text-gray-900">{{ trip.date | date:'dd/MM/yyyy HH:mm' }}</div>
                            <div class="text-xs text-gray-500">{{ trip.parcels.length }} Colis chargé(s)</div>
+                           <!-- Indicateur de demandes supplémentaires -->
+                           <div *ngIf="trip.extraRequests?.length" class="mt-1">
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                                 +{{ trip.extraRequests?.length }} Demandes
+                              </span>
+                           </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                            <div class="flex justify-end gap-2">
-                              <!-- BOUTON GOOGLE MAPS INTELLIGENT -->
+                              <!-- BOUTON AJOUTER DEMANDE -->
+                              <button (click)="openRequestModal(trip)" class="inline-flex items-center px-3 py-1.5 border border-indigo-200 shadow-sm text-xs font-medium rounded text-indigo-700 bg-indigo-50 hover:bg-indigo-100" title="Ajouter Colis/Passager">
+                                 ➕ Demande
+                              </button>
+
+                              <!-- BOUTON GOOGLE MAPS -->
                               <button 
                                  (click)="handleTrackClick(trip, $event)"
-                                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                 class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
                                  title="Ouvrir dans Google Maps">
                                  <span class="mr-1.5 text-red-500 text-sm">📍</span> 
                                  {{ trip.status === 'PENDING' ? 'Voir Trajet' : 'Suivre' }}
                               </button>
                               
                               <!-- BOUTON SUPPRIMER -->
-                              <button (click)="deleteTrip(trip)" class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-1.5 rounded transition" title="Supprimer le trajet">
+                              <button (click)="deleteTrip(trip)" class="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 p-1.5 rounded transition" title="Supprimer">
                                  🗑️
                               </button>
                            </div>
@@ -182,7 +191,6 @@ import { map } from 'rxjs/operators';
                      <tr>
                         <td colspan="4" class="px-6 py-10 text-center text-gray-500">
                            <p class="text-lg">Aucun trajet trouvé.</p>
-                           <p class="text-sm">Modifiez vos filtres ou créez un nouveau trajet.</p>
                         </td>
                      </tr>
                   }
@@ -190,6 +198,57 @@ import { map } from 'rxjs/operators';
             </table>
          </div>
       </div>
+
+      <!-- MODALE AJOUT DEMANDE -->
+      <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md w-full">
+               <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Ajouter une demande</h3>
+                  <form [formGroup]="requestForm" (ngSubmit)="submitRequest()">
+                     <div class="mb-3">
+                        <label class="block text-sm font-medium text-gray-700">Type</label>
+                        <select formControlName="type" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm border p-2">
+                           <option value="PARCEL">📦 Colis supplémentaire</option>
+                           <option value="PASSENGER">🙋 Passager (Covoiturage)</option>
+                        </select>
+                     </div>
+                     
+                     <!-- CHAMPS POUR LES COLIS (Affichés si type = PARCEL) -->
+                     <div *ngIf="requestForm.get('type')?.value === 'PARCEL'" class="mb-3">
+                        <div class="flex justify-between items-center mb-2">
+                           <label class="block text-sm font-medium text-gray-700">Détails des colis</label>
+                           <button type="button" (click)="addRequestParcel()" class="text-xs text-indigo-600 font-bold">+ Colis</button>
+                        </div>
+                        <div formArrayName="requestParcels" class="space-y-2 max-h-48 overflow-y-auto">
+                           @for (p of requestParcels.controls; track i; let i = $index) {
+                              <div [formGroupName]="i" class="flex gap-2 items-center">
+                                 <input formControlName="description" placeholder="Desc" class="flex-1 text-sm border-gray-300 rounded border p-1">
+                                 <input formControlName="weight" type="number" placeholder="Kg" class="w-16 text-sm border-gray-300 rounded border p-1">
+                                 <button type="button" (click)="removeRequestParcel(i)" class="text-red-500">×</button>
+                              </div>
+                           }
+                        </div>
+                     </div>
+
+                     <!-- CHAMP POUR LE PASSAGER (Affiché si type = PASSENGER) -->
+                     <div *ngIf="requestForm.get('type')?.value === 'PASSENGER'" class="mb-3">
+                        <label class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea formControlName="description" rows="3" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm border p-2" placeholder="Nom du passager, point de RDV..."></textarea>
+                     </div>
+
+                     <div class="flex justify-end gap-2 mt-4">
+                        <button type="button" (click)="closeRequestModal()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Annuler</button>
+                        <button type="submit" [disabled]="requestForm.invalid" class="px-4 py-2 text-white bg-indigo-600 rounded hover:bg-indigo-700 disabled:opacity-50">Ajouter</button>
+                     </div>
+                  </form>
+               </div>
+            </div>
+          </div>
+      </div>
+
     </div>
   `
 })
@@ -198,9 +257,10 @@ export class TripManagerComponent {
   private tripService = inject(TripService);
   private carService = inject(CarService);
   private authService = inject(AuthService);
-  private companyService = inject(CompanyService); // INJECTION
+  private companyService = inject(CompanyService);
   
   showForm = false;
+  selectedTripForRequest: Trip | null = null;
   
   // Coordonnées Sfax -> Tunis pour l'interpolation
   private readonly SFAX_COORDS = { lat: 34.74, lng: 10.76, city: 'Sfax' };
@@ -219,13 +279,20 @@ export class TripManagerComponent {
   companyFilterControl = this.fb.control('');
   inProgressFilterControl = this.fb.control(false);
 
-  // Formulaire
+  // Formulaire Création Trajet
   tripForm = this.fb.group({
     departure: ['', Validators.required],
     destination: ['', Validators.required],
     date: ['', Validators.required],
     carId: ['', Validators.required],
     parcels: this.fb.array([])
+  });
+
+  // Formulaire Demande Supplémentaire
+  requestForm = this.fb.group({
+    type: ['PARCEL', Validators.required],
+    description: [''], // Optionnel (utilisé pour passager)
+    requestParcels: this.fb.array([]) // Utilisé pour les colis
   });
 
   // Filter Logic (Signal Computed)
@@ -248,11 +315,15 @@ export class TripManagerComponent {
   
   private refreshSignal = signal(0); 
 
-  // Accesseurs Formulaire
+  // Accesseurs Formulaire Principal
   get parcels() { return this.tripForm.get('parcels') as FormArray; }
+
+  // Accesseurs Formulaire Demande
+  get requestParcels() { return this.requestForm.get('requestParcels') as FormArray; }
 
   toggleForm() { this.showForm = !this.showForm; }
 
+  // --- GESTION COLIS PRINCIPAUX ---
   addParcel() {
     this.parcels.push(this.fb.group({
       description: ['', Validators.required],
@@ -260,12 +331,21 @@ export class TripManagerComponent {
       recipient: ['', Validators.required]
     }));
   }
-
   removeParcel(index: number) { this.parcels.removeAt(index); }
+
+  // --- GESTION COLIS DEMANDE ---
+  addRequestParcel() {
+    this.requestParcels.push(this.fb.group({
+      description: ['', Validators.required],
+      weight: [0, Validators.required],
+      recipient: [''] // Optionnel pour demande rapide
+    }));
+  }
+  removeRequestParcel(index: number) { this.requestParcels.removeAt(index); }
+
 
   async createTrip() {
     if (this.tripForm.valid) {
-      // Récupérer le nom de la société à partir du profil de l'utilisateur connecté ou du choix (simplification)
       const company = 'DHL'; // NOTE: Remplacer par la logique de récupération de la société de l'admin
       
       const formVal = this.tripForm.value;
@@ -275,9 +355,10 @@ export class TripManagerComponent {
         date: formVal.date!,
         carId: formVal.carId!,
         driverId: 'PENDING', 
-        company: company, // Assignation auto
+        company: company,
         status: 'PENDING',
-        parcels: formVal.parcels as any[]
+        parcels: formVal.parcels as any[],
+        extraRequests: []
       };
 
       await this.tripService.createTrip(newTrip);
@@ -287,58 +368,74 @@ export class TripManagerComponent {
     }
   }
 
-  // Suppression
   async deleteTrip(trip: Trip) {
     if (confirm(`Êtes-vous sûr de vouloir supprimer le trajet ${trip.departure} -> ${trip.destination} ?`)) {
       await this.tripService.deleteTrip(trip.uid!);
     }
   }
 
-  // --- NOUVELLE FONCTION INTELIGENTE DE TRACKING ---
+  // --- GESTION DES DEMANDES SUPPLÉMENTAIRES ---
+  openRequestModal(trip: Trip) {
+    this.selectedTripForRequest = trip;
+    this.requestForm.reset({ type: 'PARCEL' });
+    this.requestParcels.clear();
+    // Ajouter un colis par défaut
+    this.addRequestParcel();
+  }
+
+  closeRequestModal() {
+    this.selectedTripForRequest = null;
+  }
+
+  async submitRequest() {
+    if (this.requestForm.valid && this.selectedTripForRequest) {
+      const formVal = this.requestForm.value;
+      
+      const req: TripRequest = {
+        type: formVal.type as any,
+        description: formVal.description || '',
+        parcels: formVal.type === 'PARCEL' ? formVal.requestParcels as any[] : undefined,
+        requesterName: 'Employé', 
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+
+      await this.tripService.addRequest(this.selectedTripForRequest.uid!, req);
+      this.closeRequestModal();
+      alert('Demande ajoutée avec succès ! Le chauffeur sera notifié.');
+    }
+  }
+
+  // --- FONCTION INTELIGENTE DE TRACKING ---
   async handleTrackClick(trip: Trip, event: Event) {
-    // Si le trajet n'est pas terminé, on calcule la position
     if (trip.status !== 'COMPLETED') {
-        
-        // Calculer la nouvelle position basée sur l'heure
         const { location, status } = this.calculateMovement(trip);
-        
-        // Si le trajet est terminé (car temps écoulé > 100%)
         if (status === 'COMPLETED') {
              await this.tripService.updatePosition(trip.uid!, location, 'COMPLETED');
              alert(`Livraison terminée à ${location.city} !`);
         } else {
-             // Mise à jour de la position dans Firestore
              await this.tripService.updatePosition(trip.uid!, location, 'IN_PROGRESS');
-             
-             // Mise à jour de l'objet trip localement (pour le feedback immédiat)
              trip.currentLocation = location;
              trip.status = 'IN_PROGRESS';
         }
-        
-        // Ouvrir la carte avec la position mise à jour
         const url = this.getGoogleMapsUrl(trip);
         window.open(url, '_blank');
     } else {
-        // Le trajet est COMPLETED, on ouvre la vue finale
         const url = this.getGoogleMapsUrl(trip);
         window.open(url, '_blank');
     }
   }
 
-  // --- LOGIQUE DE CALCUL DE POSITION (Interpolation linéaire) ---
+  // --- CALCUL MOUVEMENT ---
   calculateMovement(trip: Trip): { location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED' } {
     const departureTime = new Date(trip.date).getTime();
     const currentTime = Date.now();
     const elapsedTime = currentTime - departureTime;
-
-    // Calculer le pourcentage d'avancement (clamped entre 0 et 1)
     let progress = Math.min(1, Math.max(0, elapsedTime / this.ESTIMATED_DURATION_MS));
     
-    // Déterminer la ville de départ et d'arrivée (simplification Sfax -> Tunis)
     const start = this.SFAX_COORDS;
     const end = this.TUNIS_COORDS;
 
-    // Calcul par interpolation linéaire (LERP)
     const currentLat = start.lat + (end.lat - start.lat) * progress;
     const currentLng = start.lng + (end.lng - start.lng) * progress;
 
@@ -347,45 +444,29 @@ export class TripManagerComponent {
     
     if (progress >= 1) {
         status = 'COMPLETED';
-        currentCity = end.city; // Tunis
+        currentCity = end.city;
     } else if (progress > 0) {
-        // Pour déterminer la ville intermédiaire, on pourrait utiliser des seuils ou une API de géocodage,
-        // mais pour la démo, on utilise une simple étiquette.
         currentCity = 'En cours (Estimation)';
     } else {
-        currentCity = start.city; // Sfax
+        currentCity = start.city;
     }
 
     return {
-        location: {
-            lat: currentLat,
-            lng: currentLng,
-            city: currentCity,
-            lastUpdate: new Date().toISOString()
-        },
+        location: { lat: currentLat, lng: currentLng, city: currentCity, lastUpdate: new Date().toISOString() },
         status: status
     };
   }
 
-
-  // --- LOGIQUE GOOGLE MAPS ---
   getGoogleMapsUrl(trip: Trip): string {
     const baseUrl = 'https://www.google.com/maps/dir/?api=1';
     const origin = encodeURIComponent(trip.departure);
     const dest = encodeURIComponent(trip.destination);
-    
     let url = `${baseUrl}&origin=${origin}&destination=${dest}&travelmode=driving`;
-    
-    // Si la position est disponible, on l'utilise pour forcer le marqueur
     if (trip.currentLocation) {
        const waypoint = `${trip.currentLocation.lat},${trip.currentLocation.lng}`;
-       
-       // Nouvelle destination = position actuelle (force le marqueur)
        url = `${baseUrl}&origin=${origin}&destination=${waypoint}&travelmode=driving`;
-       // Waypoint final = destination réelle
        url += `&waypoints=${dest}`;
     }
-
     return url;
   }
 }
