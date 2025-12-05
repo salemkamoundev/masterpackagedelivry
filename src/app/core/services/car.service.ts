@@ -7,8 +7,8 @@ export interface Car {
   model: string;
   plate: string;
   status: 'AVAILABLE' | 'MAINTENANCE' | 'BUSY';
-  assignedDriverId?: string | null; // ID du chauffeur affecté
-  company: string; // NOUVEAU: Société propriétaire du véhicule
+  assignedDriverId?: string | null;
+  company: string; // Champ critique pour l'isolation des données
 }
 
 @Injectable({
@@ -23,7 +23,6 @@ export class CarService {
   }
 
   addCar(car: Car) {
-    // Le champ 'company' est inclus dans l'objet 'car' passé en argument
     return addDoc(this.carsCollection, car);
   }
 

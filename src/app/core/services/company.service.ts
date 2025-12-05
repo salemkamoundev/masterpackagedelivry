@@ -1,13 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Firestore, collection, addDoc, updateDoc, doc, collectionData, query, where } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
-import { take, tap } from 'rxjs/operators';
 
 export interface Company {
   uid?: string;
   name: string;
   contactEmail: string;
-  isActive: boolean; // Utilise isActive pour désactiver au lieu de supprimer
+  isActive: boolean;
   createdAt: string;
 }
 
@@ -18,15 +17,12 @@ export class CompanyService {
   private firestore = inject(Firestore);
   private companiesCollection = collection(this.firestore, 'companies');
 
-  // Signal pour la liste des sociétés actives (utilisé pour les lookups/filtres)
+  // Signal exposant les sociétés actives pour les listes déroulantes (Register, Filtres)
   activeCompanies = signal<Company[]>([]);
 
   constructor() {
-    // Écoute en temps réel les changements pour la liste des sociétés
-    // Filtrer directement dans le Firestore est plus efficace, mais pour des raisons de 
-    // flexibilité et si le nombre reste petit, nous faisons un filtre post-réception.
+    // Souscription temps réel pour garder le signal à jour
     this.getCompanies().subscribe(companies => {
-      // Filtrer côté client pour exposer uniquement les sociétés actives
       const active = companies.filter(c => c.isActive);
       this.activeCompanies.set(active);
     });
@@ -39,7 +35,7 @@ export class CompanyService {
   addCompany(company: Omit<Company, 'uid' | 'createdAt'>) {
     const newCompany: Company = {
       ...company,
-      isActive: true, // Active par défaut
+      isActive: true, // Par défaut une société est active
       createdAt: new Date().toISOString()
     };
     return addDoc(this.companiesCollection, newCompany);
@@ -50,7 +46,6 @@ export class CompanyService {
     return updateDoc(companyRef, data);
   }
 
-  // Désactivation (Règle métier: ne pas supprimer, juste désactiver)
   toggleStatus(uid: string, isActive: boolean) {
     return this.updateCompany(uid, { isActive });
   }

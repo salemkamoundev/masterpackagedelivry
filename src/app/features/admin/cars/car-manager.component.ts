@@ -14,81 +14,79 @@ import { toSignal } from '@angular/core/rxjs-interop';
   imports: [CommonModule, ReactiveFormsModule],
   template: `
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
-      <!-- Affichage de la société actuelle -->
+      <!-- Info Admin -->
       <div class="lg:col-span-3 bg-indigo-50 p-4 rounded-lg border border-indigo-200 mb-4">
         <p class="text-sm font-semibold text-indigo-800">
-          Gestion des véhicules pour : 
+          Gestion pour la société : 
           <span class="font-bold text-indigo-900">{{ adminCompany() || 'Chargement...' }}</span>
         </p>
       </div>
 
-      <!-- Formulaire Ajout -->
+      <!-- Formulaire -->
       <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 h-fit">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">Nouvelle Voiture</h3>
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Ajouter un Véhicule</h3>
         <form [formGroup]="carForm" (ngSubmit)="addCar()" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700">Modèle</label>
-            <input formControlName="model" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2" placeholder="Ex: Renault Master">
+            <input formControlName="model" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Ex: Renault Kangoo">
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700">Plaque</label>
-            <input formControlName="plate" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2" placeholder="AA-123-BB">
+            <input formControlName="plate" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="123 TN 4567">
           </div>
           <button type="submit" [disabled]="carForm.invalid || !adminCompany()" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 disabled:opacity-50">
-             Ajouter ce véhicule (à {{ adminCompany() }})
+             Ajouter à {{ adminCompany() }}
           </button>
         </form>
       </div>
 
-      <!-- Liste des Voitures & Affectation -->
+      <!-- Liste -->
       <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-           <h3 class="text-lg font-bold text-gray-800">Flotte Gérée</h3>
+           <h3 class="text-lg font-bold text-gray-800">Flotte {{ adminCompany() }}</h3>
         </div>
-        @if ((carsFiltered$ | async)?.length === 0) {
-           <p class="p-6 text-center text-gray-500">Aucun véhicule trouvé pour cette société.</p>
-        } @else {
-           <div class="overflow-x-auto">
-              <table class="min-w-full divide-y divide-gray-200">
-                 <thead class="bg-gray-50">
+        
+        <div *ngIf="(carsFiltered$ | async)?.length === 0" class="p-6 text-center text-gray-500">
+           Aucun véhicule trouvé.
+        </div>
+
+        <div class="overflow-x-auto" *ngIf="(carsFiltered$ | async)?.length ?? 0 > 0">
+           <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Véhicule</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chauffeur</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                @for (car of carsFiltered$ | async; track car.uid) {
                    <tr>
-                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Véhicule</th>
-                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chauffeur Affecté</th>
+                     <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-bold text-gray-900">{{ car.model }}</div>
+                        <div class="text-xs text-gray-500">{{ car.plate }}</div>
+                     </td>
+                     <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                           [ngClass]="{'bg-green-100 text-green-800': car.status === 'AVAILABLE', 'bg-red-100 text-red-800': car.status === 'BUSY'}">
+                           {{ car.status }}
+                        </span>
+                     </td>
+                     <td class="px-6 py-4 whitespace-nowrap">
+                        <select #driverSelect (change)="assignDriver(car, driverSelect.value)" class="text-sm border-gray-300 rounded border p-1">
+                           <option value="" [selected]="!car.assignedDriverId">-- Disponible --</option>
+                           @for (driver of drivers$ | async; track driver.uid) {
+                              <option [value]="driver.uid" [selected]="car.assignedDriverId === driver.uid">
+                                 {{ driver.email }}
+                              </option>
+                           }
+                        </select>
+                     </td>
                    </tr>
-                 </thead>
-                 <tbody class="bg-white divide-y divide-gray-200">
-                   @for (car of carsFiltered$ | async; track car.uid) {
-                      <tr>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                           <div class="text-sm font-bold text-gray-900">{{ car.model }}</div>
-                           <div class="text-xs text-gray-500">{{ car.plate }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                           <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                              [ngClass]="{'bg-green-100 text-green-800': car.status === 'AVAILABLE', 'bg-red-100 text-red-800': car.status === 'BUSY', 'bg-yellow-100 text-yellow-800': car.status === 'MAINTENANCE'}">
-                              {{ car.status }}
-                           </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                           <div class="flex items-center space-x-2">
-                              <select #driverSelect (change)="assignDriver(car, driverSelect.value)" class="text-sm border-gray-300 rounded shadow-sm focus:ring-indigo-500 focus:border-indigo-500 border p-1">
-                                 <option value="" [selected]="!car.assignedDriverId">-- Disponible --</option>
-                                 @for (driver of drivers$ | async; track driver.uid) {
-                                    <option [value]="driver.uid" [selected]="car.assignedDriverId === driver.uid">
-                                       {{ driver.email }}
-                                    </option>
-                                 }
-                              </select>
-                           </div>
-                        </td>
-                      </tr>
-                   }
-                 </tbody>
-              </table>
-           </div>
-        }
+                }
+              </tbody>
+           </table>
+        </div>
       </div>
     </div>
   `
@@ -99,49 +97,27 @@ export class CarManagerComponent {
   private authService = inject(AuthService);
   private fb = inject(FormBuilder);
 
-  // Observable de l'utilisateur Firebase (gère null/undefined au début)
-  private firebaseUser$ = this.authService.user$; 
-
-  // FIX: Utiliser switchMap sur l'utilisateur Firebase pour obtenir le profil Firestore
-  adminProfile$ = this.firebaseUser$.pipe(
-    switchMap(user => {
-      if (user && user.uid) {
-        return this.authService.getUserProfile(user.uid);
-      }
-      return of(undefined); // Retourne undefined si l'utilisateur n'est pas connecté
-    })
+  // Gestion robuste de l'utilisateur connecté avec switchMap pour éviter l'erreur TS2533
+  adminProfile$ = this.authService.user$.pipe(
+    switchMap(user => user ? this.authService.getUserProfile(user.uid) : of(null))
   );
   
-  // Convertir le profil en signal pour un accès facile au template
-  adminCompany = toSignal(this.adminProfile$.pipe(
-    map(profile => profile?.company || null)
-  ));
+  // Signal pour l'affichage dans le template
+  adminCompany = toSignal(this.adminProfile$.pipe(map(p => p?.company || null)));
 
-  // Filtre des voitures par la société de l'admin
-  carsFiltered$ = combineLatest([
-    this.carService.getCars(),
-    this.adminProfile$
-  ]).pipe(
+  // Filtre des voitures : on ne montre que celles de la société de l'admin
+  carsFiltered$ = combineLatest([this.carService.getCars(), this.adminProfile$]).pipe(
     map(([cars, profile]) => {
-      const company = profile?.company;
-      if (!company) return [];
-      // Filtrer les voitures n'appartenant qu'à la société de l'admin
-      return cars.filter(car => car.company === company);
+      if (!profile?.company) return [];
+      return cars.filter(car => car.company === profile.company);
     })
   );
 
-  // Récupération des chauffeurs (actifs et appartenant à la même société)
-  drivers$ = combineLatest([
-    this.userService.getAllUsers(),
-    this.adminProfile$
-  ]).pipe(
+  // Filtre des chauffeurs : on ne montre que ceux de la société de l'admin
+  drivers$ = combineLatest([this.userService.getAllUsers(), this.adminProfile$]).pipe(
     map(([users, profile]) => {
-      const company = profile?.company;
-      if (!company) return [];
-      // Filtrer les utilisateurs par rôle 'DRIVER', statut 'isActive' et même 'company'
-      return users.filter(u => 
-        u.role === 'DRIVER' && u.isActive && u.company === company
-      );
+      if (!profile?.company) return [];
+      return users.filter(u => u.role === 'DRIVER' && u.isActive && u.company === profile.company);
     })
   );
 
@@ -158,17 +134,18 @@ export class CarManagerComponent {
       ...this.carForm.value as any,
       status: 'AVAILABLE',
       assignedDriverId: null,
-      company: company // ENREGISTREMENT AVEC LA SOCIÉTÉ DE L'ADMIN
+      company: company // Sécurité: on force la société de l'admin
     };
     this.carService.addCar(newCar).then(() => {
       this.carForm.reset();
-      alert('Véhicule ajouté à la société ' + company + '!');
+      alert('Véhicule ajouté !');
     });
   }
 
   assignDriver(car: Car, driverId: string) {
+    // Sécurité supplémentaire côté client
     if (car.company !== this.adminCompany()) {
-       alert("Erreur: Vous ne pouvez pas modifier un véhicule qui n'appartient pas à votre société.");
+       alert("Action non autorisée sur ce véhicule.");
        return;
     }
     this.carService.assignDriver(car.uid!, driverId || null);
