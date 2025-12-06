@@ -11,125 +11,74 @@ import { toSignal } from '@angular/core/rxjs-interop';
   standalone: true,
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   template: `
-    <div class="min-h-screen bg-gray-50">
+    <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       
       <!-- Mobile Overlay -->
-      <div *ngIf="isMobileMenuOpen" (click)="toggleMobileMenu()" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"></div>
+      <div *ngIf="isMobileMenuOpen" (click)="toggleMobileMenu()" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity"></div>
 
       <!-- SIDEBAR -->
-      <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform"
-             [ngClass]="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
+      <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform lg:translate-x-0"
+             [ngClass]="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
         
         <!-- Logo -->
-        <div class="h-20 flex items-center px-6 border-b border-slate-800 bg-slate-950">
+        <div class="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
           <div class="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <span class="text-xl">🚚</span>
           </div>
-          <span class="text-lg font-bold tracking-wide text-gray-100">
-            Master<span class="text-indigo-400">Delivery</span>
-          </span>
+          <span class="text-lg font-bold tracking-wide text-gray-100">Master<span class="text-indigo-400">Delivery</span></span>
         </div>
 
         <!-- Navigation -->
         <nav class="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
           <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Menu</p>
           
-          <a routerLink="/admin" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="bg-indigo-600 text-white"
-             (click)="toggleMobileMenu()"
-             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
-             <span class="mr-3 text-xl">🏠</span>
-             <span class="font-medium">Accueil</span>
+          <a routerLink="/admin" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">🏠</span> <span class="font-medium">Accueil</span>
           </a>
 
-          <a routerLink="/admin/users" routerLinkActive="bg-indigo-600 text-white"
-             (click)="toggleMobileMenu()"
-             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
-             <span class="mr-3 text-xl">👥</span>
-             <span class="font-medium">Utilisateurs</span>
+          <a routerLink="/admin/live-map" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">🌍</span> <span class="font-medium">Carte Live</span>
           </a>
 
-          <a routerLink="/admin/trips" routerLinkActive="bg-indigo-600 text-white"
-             (click)="toggleMobileMenu()"
-             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
-             <span class="mr-3 text-xl">📦</span>
-             <span class="font-medium">Trajets</span>
+          <a routerLink="/admin/users" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">👥</span> <span class="font-medium">Utilisateurs</span>
           </a>
 
-          <a routerLink="/admin/cars" routerLinkActive="bg-indigo-600 text-white"
-             (click)="toggleMobileMenu()"
-             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
-             <span class="mr-3 text-xl">🚚</span>
-             <span class="font-medium">Véhicules</span>
+          <a routerLink="/admin/trips" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">📦</span> <span class="font-medium">Trajets</span>
+          </a>
+
+          <a routerLink="/admin/cars" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">🚚</span> <span class="font-medium">Véhicules</span>
           </a>
           
-          <a routerLink="/admin/companies" routerLinkActive="bg-indigo-600 text-white"
-             (click)="toggleMobileMenu()"
-             class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
-             <span class="mr-3 text-xl">🏢</span>
-             <span class="font-medium">Sociétés</span>
+          <a routerLink="/admin/companies" routerLinkActive="bg-indigo-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all mb-1 cursor-pointer">
+             <span class="mr-3 text-xl">🏢</span> <span class="font-medium">Sociétés</span>
+          </a>
+
+          <a routerLink="/admin/mock-data" routerLinkActive="bg-purple-600 text-white" (click)="toggleMobileMenu()" class="flex items-center px-3 py-2.5 rounded-lg text-purple-300 hover:bg-purple-800 hover:text-white transition-all mb-1 cursor-pointer mt-4 border-t border-slate-800 pt-4">
+             <span class="mr-3 text-xl">⚡</span> <span class="font-medium">Données Test</span>
           </a>
           
-           <button (click)="logout()" class="w-full flex items-center px-3 py-2.5 rounded-lg text-red-400 hover:bg-slate-800 hover:text-red-300 transition-all mt-4 border-t border-slate-800 pt-4">
-             <span class="mr-3 text-xl">🚪</span>
-             <span class="font-medium">Déconnexion</span>
+           <button (click)="logout()" class="w-full flex items-center px-3 py-2.5 rounded-lg text-red-400 hover:bg-slate-800 hover:text-red-300 transition-all mt-1 cursor-pointer">
+             <span class="mr-3 text-xl">🚪</span> <span class="font-medium">Déconnexion</span>
            </button>
         </nav>
-
-        <!-- PROFIL UTILISATEUR DYNAMIQUE -->
-        <div class="p-4 border-t border-slate-800 bg-slate-950/50">
-           @if (userProfile(); as profile) {
-               @if (profile.email === 'admin@gmail.com') {
-                   <div class="flex items-center gap-3">
-                      <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700">A</div>
-                      <div>
-                         <p class="text-sm font-medium text-white">Admin</p>
-                         <p class="text-xs text-indigo-300">Super Admin</p>
-                      </div>
-                   </div>
-               } @else {
-                   <div class="flex items-center gap-3">
-                      <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700 text-lg">
-                         {{ profile.email.charAt(0).toUpperCase() }}
-                      </div>
-                      <div class="overflow-hidden">
-                         <p class="text-sm font-medium text-white truncate" title="{{ profile.email }}">{{ profile.email }}</p>
-                         <p class="text-xs text-indigo-300 truncate">{{ profile.role }} | {{ profile.company }}</p>
-                      </div>
-                   </div>
-               }
-           } @else {
-               <div class="flex items-center gap-3 animate-pulse">
-                   <div class="h-10 w-10 rounded-full bg-slate-700"></div>
-                   <div class="flex-1 space-y-2">
-                      <div class="h-2 bg-slate-700 rounded w-3/4"></div>
-                      <div class="h-2 bg-slate-700 rounded w-1/2"></div>
-                   </div>
-               </div>
-           }
-        </div>
       </aside>
 
       <!-- MAIN CONTENT -->
-      <div class="lg:pl-64 flex flex-col min-h-screen relative transition-all duration-300">
-        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 lg:hidden sticky top-0 z-30">
+      <div class="lg:pl-64 flex flex-col h-screen w-full relative transition-all duration-300">
+        <!-- Header Mobile Uniquement -->
+        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 lg:hidden shrink-0 z-30 relative">
              <span class="font-bold text-gray-800">MasterDelivery</span>
              <button (click)="toggleMobileMenu()" class="text-gray-500 p-2 border rounded">☰</button>
         </header>
 
-        <main class="flex-1 p-6 pb-24 overflow-y-auto">
+        <!-- Zone de contenu principale : Pas de padding global, pas de scroll global -->
+        <!-- Cela permet au composant enfant (la carte) de gérer sa propre hauteur -->
+        <main class="flex-1 overflow-hidden relative flex flex-col bg-gray-50">
              <router-outlet></router-outlet>
         </main>
-
-        <footer class="fixed bottom-0 right-0 w-full lg:w-[calc(100%-16rem)] bg-white border-t border-gray-200 z-40">
-            <div class="max-w-7xl mx-auto py-4 px-4 flex items-center justify-between">
-                <div class="text-xs text-gray-500">&copy; 2024 Master Delivery.</div>
-                <div class="flex space-x-2">
-                    <button (click)="logout()" class="text-xs text-red-500 border border-red-100 px-2 py-1 rounded">Déconnexion</button>
-                </div>
-            </div>
-        </footer>
       </div>
     </div>
   `
@@ -138,7 +87,6 @@ export class AdminDashboardComponent {
   private authService = inject(AuthService);
   isMobileMenuOpen = false;
 
-  // Signal dérivé de l'utilisateur Firebase -> Profil Firestore
   userProfile = toSignal(
     this.authService.user$.pipe(
       switchMap(user => user ? this.authService.getUserProfile(user.uid) : of(null))

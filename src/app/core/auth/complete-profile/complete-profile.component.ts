@@ -16,13 +16,12 @@ import { take } from 'rxjs/operators';
         <div class="text-center">
           <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Finaliser l'inscription</h2>
           <p class="mt-2 text-sm text-gray-600">
-            Bienvenue ! Veuillez compléter votre profil pour accéder à l'application.
+            Veuillez compléter vos informations pour accéder à la plateforme.
           </p>
         </div>
         
         <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
           
-          <!-- Affichage Email (Lecture seule) -->
           <div>
             <label class="block text-sm font-medium text-gray-700">Compte Google</label>
             <div class="mt-1 px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-gray-600 text-sm">
@@ -30,9 +29,15 @@ import { take } from 'rxjs/operators';
             </div>
           </div>
 
+          <!-- CHAMP TÉLÉPHONE AJOUTÉ -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Numéro de téléphone</label>
+            <input formControlName="phoneNumber" type="tel" placeholder="+216 00 000 000" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2">
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Métier</label>
-            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border">
+            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
               <option value="" disabled>Choisir un métier</option>
               <option value="DRIVER">Chauffeur</option>
               <option value="EMPLOYEE">Employé</option>
@@ -41,13 +46,12 @@ import { take } from 'rxjs/operators';
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Société</label>
-            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border">
+            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
               <option value="" disabled>Choisir une société</option>
               @for (company of activeCompanies(); track company.uid) {
                  <option [value]="company.name">{{ company.name }}</option>
               }
             </select>
-            <p *ngIf="activeCompanies().length === 0" class="mt-1 text-xs text-red-500">Aucune société disponible.</p>
           </div>
 
           <button type="submit" [disabled]="profileForm.invalid"
@@ -69,6 +73,7 @@ export class CompleteProfileComponent implements OnInit {
   activeCompanies = this.companyService.activeCompanies;
 
   profileForm = this.fb.group({
+    phoneNumber: ['', [Validators.required, Validators.minLength(8)]],
     role: ['', Validators.required],
     company: ['', Validators.required]
   });
@@ -83,22 +88,22 @@ export class CompleteProfileComponent implements OnInit {
     if (this.profileForm.valid) {
       this.currentUser$.pipe(take(1)).subscribe(user => {
         if (user) {
-          const { role, company } = this.profileForm.value;
+          const { role, company, phoneNumber } = this.profileForm.value;
           this.authService.createProfile(
             user, 
             role as 'DRIVER' | 'EMPLOYEE', 
-            company!
+            company!,
+            phoneNumber!
           ).subscribe({
             next: () => {
-              alert('Profil complété ! En attente de validation par un administrateur.');
-              // Redirection conditionnelle
+              alert('Profil complété !');
               if (role === 'DRIVER') {
                 this.router.navigate(['/driver']);
               } else {
                 this.router.navigate(['/admin']);
               }
             },
-            error: (err) => alert('Erreur lors de la création du profil: ' + err.message)
+            error: (err) => alert('Erreur création profil : ' + err.message)
           });
         }
       });

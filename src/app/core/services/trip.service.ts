@@ -17,25 +17,39 @@ export interface GeoLocation {
 
 export interface TripRequest {
   type: 'PARCEL' | 'PASSENGER';
-  description?: string; // Optionnel si c'est des colis
-  parcels?: Parcel[];   // Liste des colis pour la demande
+  description?: string;
+  parcels?: Parcel[];
   requesterName: string;
+  requesterEmail?: string;
+  requesterCompany?: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   createdAt: string;
 }
 
 export interface Trip {
   uid?: string;
+  
+  // Infos Texte
   departure: string;
   destination: string;
+  
+  // NOUVEAU : Coordonnées GPS fixes du trajet
+  departureLat?: number;
+  departureLng?: number;
+  destinationLat?: number;
+  destinationLng?: number;
+
   date: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   driverId: string;
   carId: string;
   company: string;
+  
+  // Position actuelle temps réel
   currentLocation?: GeoLocation;
+  
   parcels: Parcel[];
-  extraRequests?: TripRequest[]; // Nouvelles demandes (Colis ou Passager)
+  extraRequests?: TripRequest[];
 }
 
 @Injectable({
@@ -66,7 +80,6 @@ export class TripService {
     });
   }
 
-  // Ajouter une demande supplémentaire (Colis ou Passager)
   addRequest(tripId: string, request: TripRequest) {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, {

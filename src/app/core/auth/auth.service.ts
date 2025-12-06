@@ -1,15 +1,34 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, user, User } from '@angular/fire/auth';
-import { Firestore, doc, setDoc, getDoc } from '@angular/fire/firestore';
 import { Router } from '@angular/router';
 import { from, Observable, of } from 'rxjs';
 import { switchMap, map } from 'rxjs/operators';
+
+// AngularFire
+import { Auth, user } from '@angular/fire/auth';
+import { Firestore } from '@angular/fire/firestore';
+
+// SDK Natif
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  User 
+} from 'firebase/auth';
+
+import { 
+  doc, 
+  setDoc, 
+  getDoc 
+} from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
   email: string;
   role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN';
   company: string;
+  phoneNumber: string; // NOUVEAU CHAMP OBLIGATOIRE
   isActive: boolean;
   createdAt: Date;
 }
@@ -27,32 +46,31 @@ export class AuthService {
 
   constructor() {}
 
-  // Login Email/Password
   login(email: string, pass: string) {
     return from(signInWithEmailAndPassword(this.auth, email, pass));
   }
 
-  // Login Google (Ne crée PLUS le profil automatiquement)
   loginGoogle() {
     const provider = new GoogleAuthProvider();
     return from(signInWithPopup(this.auth, provider));
   }
 
-  // Inscription Email (Crée le profil immédiatement)
-  register(email: string, pass: string, role: 'DRIVER' | 'EMPLOYEE', company: string) {
+  // Signature mise à jour avec phoneNumber
+  register(email: string, pass: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
     return from(createUserWithEmailAndPassword(this.auth, email, pass)).pipe(
-      switchMap(credential => this.createProfile(credential.user, role, company))
+      switchMap(credential => this.createProfile(credential.user, role, company, phoneNumber))
     );
   }
 
-  // Méthode publique pour créer le profil (utilisée par Register et CompleteProfile)
-  createProfile(user: User, role: 'DRIVER' | 'EMPLOYEE', company: string) {
+  // Signature mise à jour avec phoneNumber
+  createProfile(user: User, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
     const userProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
       role: role,
       company: company,
-      isActive: false, // Inactif par défaut
+      phoneNumber: phoneNumber,
+      isActive: false, 
       createdAt: new Date()
     };
     const userDocRef = doc(this.firestore, 'users', user.uid);

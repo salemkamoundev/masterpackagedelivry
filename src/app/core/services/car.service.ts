@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, addDoc, updateDoc, doc, collectionData } from '@angular/fire/firestore';
+import { Firestore } from '@angular/fire/firestore';
+import { collectionData } from '@angular/fire/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { Observable } from 'rxjs';
 
 export interface Car {
@@ -8,7 +10,7 @@ export interface Car {
   plate: string;
   status: 'AVAILABLE' | 'MAINTENANCE' | 'BUSY';
   assignedDriverId?: string | null;
-  company: string; // Champ critique pour l'isolation des données
+  company: string;
 }
 
 @Injectable({
@@ -16,7 +18,10 @@ export interface Car {
 })
 export class CarService {
   private firestore = inject(Firestore);
-  private carsCollection = collection(this.firestore, 'cars');
+  
+  private get carsCollection() {
+    return collection(this.firestore, 'cars');
+  }
 
   getCars(): Observable<Car[]> {
     return collectionData(this.carsCollection, { idField: 'uid' }) as Observable<Car[]>;
