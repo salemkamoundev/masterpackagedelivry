@@ -13,21 +13,25 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
   imports: [CommonModule],
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col">
-      <header class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-7xl mx-auto py-4 px-4 flex justify-between items-center">
+      <header class="bg-white shadow-sm border-b border-gray-200 relative z-10">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div class="flex items-center gap-3">
              <span class="text-3xl">🧢</span>
              <h1 class="text-2xl font-bold text-gray-900">Espace Chauffeur</h1>
           </div>
-          <button (click)="logout()" class="text-sm bg-red-50 text-red-600 px-3 py-2 rounded-md font-medium">Déconnexion</button>
+          <button (click)="logout()" class="text-sm bg-red-50 text-red-600 hover:bg-red-100 px-3 py-2 rounded-md font-medium transition-colors">
+             Déconnexion
+          </button>
         </div>
       </header>
 
-      <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 relative">
+      <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 sm:px-6 lg:px-8 relative">
         
         <div *ngIf="missions().length > 0; else noMissions">
            <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span class="bg-indigo-100 text-indigo-700 py-1 px-3 rounded-full text-sm">{{ missions().length }}</span>
+              <span class="bg-indigo-100 text-indigo-700 py-1 px-3 rounded-full text-sm">
+                 {{ missions().length }}
+              </span>
               Vos Missions Assignées
            </h2>
 
@@ -46,18 +50,34 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                               'bg-yellow-100 text-yellow-800': trip.status === 'PENDING',
                               'bg-blue-100 text-blue-800': trip.status === 'IN_PROGRESS',
                               'bg-green-100 text-green-800': trip.status === 'COMPLETED'
-                            }">{{ trip.status }}</span>
+                            }">
+                            {{ trip.status }}
+                          </span>
                        </div>
                        
                        <div class="space-y-2 mb-6">
-                          <div class="flex items-center text-sm text-gray-600"><span class="mr-2">📅</span> {{ trip.date | date:'dd MMM yyyy à HH:mm' }}</div>
-                          <div class="flex items-center text-sm text-gray-600"><span class="mr-2">📦</span> {{ (trip.parcels || []).length }} Colis à livrer</div>
+                          <div class="flex items-center text-sm text-gray-600">
+                             <span class="mr-2">📅</span>
+                             {{ trip.date | date:'dd MMM yyyy à HH:mm' }}
+                          </div>
+                          <div class="flex items-center text-sm text-gray-600">
+                             <span class="mr-2">🚚</span>
+                             {{ trip.carModel || 'Véhicule assigné' }} <span class="text-xs bg-gray-100 px-1 rounded ml-1">{{ trip.carPlate }}</span>
+                          </div>
+                          <div class="flex items-center text-sm text-gray-600">
+                             <span class="mr-2">📦</span>
+                             {{ (trip.parcels || []).length }} Colis à livrer
+                          </div>
                        </div>
                     </div>
                     
+                    <!-- ACTIONS CARD -->
                     <div class="bg-gray-50 px-6 py-3 border-t border-gray-100 flex flex-col gap-2">
-                       <button (click)="viewDetails(trip)" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg font-medium text-sm">Voir Détails</button>
-                       <button (click)="viewRequests(trip)" class="w-full bg-white text-gray-700 border border-gray-200 py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 relative">
+                       <button (click)="viewDetails(trip)" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm flex items-center justify-center gap-2">
+                          <span>Voir Détails</span>
+                       </button>
+                       
+                       <button (click)="viewRequests(trip)" class="w-full bg-white text-gray-700 border border-gray-200 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm flex items-center justify-center gap-2 relative">
                           <span>🔔 Afficher les demandes</span>
                           <span *ngIf="(trip.extraRequests?.length || 0) > 0" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-sm">
                              {{ trip.extraRequests?.length }}
@@ -71,16 +91,21 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
 
         <ng-template #noMissions>
            <div class="h-96 flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-              <span class="text-4xl mb-4">📭</span>
-              <h2 class="text-xl font-bold text-gray-900 mb-2">Aucune mission</h2>
-              <p class="text-gray-500">Vous n'avez pas encore de trajet assigné.</p>
+              <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                 <span class="text-4xl">📭</span>
+              </div>
+              <h2 class="text-xl font-bold text-gray-900 mb-2">Aucune mission pour le moment</h2>
+              <p class="text-gray-500 max-w-md mx-auto">
+                 Vous n'avez pas encore de trajet assigné. Assurez-vous d'être assigné à un véhicule par votre administrateur.
+              </p>
            </div>
         </ng-template>
 
-        <!-- MODAL DÉTAILS -->
-        <div *ngIf="selectedTrip()" class="fixed inset-0 z-50 overflow-y-auto">
+        <!-- MODAL DÉTAILS MISSION -->
+        <div *ngIf="selectedTrip()" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div (click)="closeDetails()" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
+            <div (click)="closeDetails()" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
             <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
               <div class="bg-indigo-600 px-4 py-4 sm:px-6 flex justify-between items-center text-white">
                    <h3 class="text-lg leading-6 font-bold">Détails de la Mission</h3>
@@ -92,37 +117,78 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                          <div class="text-xs text-gray-400 uppercase tracking-widest my-1">VERS</div>
                          <div class="text-xl font-bold text-indigo-600">{{ selectedTrip()?.destination }}</div>
                    </div>
-                   <div class="border border-gray-100 p-3 rounded-lg">
-                      <p class="text-xs text-gray-500 uppercase font-bold mb-1">Véhicule</p>
-                      <p class="text-sm font-medium">{{ selectedTrip()?.carModel }} ({{ selectedTrip()?.carPlate }})</p>
+                   <div class="grid grid-cols-2 gap-4">
+                      <div class="border border-gray-100 p-3 rounded-lg">
+                         <p class="text-xs text-gray-500 uppercase font-bold mb-1">Départ Prévu</p>
+                         <p class="text-sm font-medium">{{ selectedTrip()?.date | date:'short' }}</p>
+                      </div>
+                      <div class="border border-gray-100 p-3 rounded-lg">
+                         <p class="text-xs text-gray-500 uppercase font-bold mb-1">Véhicule</p>
+                         <p class="text-sm font-medium">{{ selectedTrip()?.carModel }}</p>
+                         <p class="text-xs text-gray-400">{{ selectedTrip()?.carPlate }}</p>
+                      </div>
                    </div>
+                   
+                   <!-- LISTE DES COLIS AVEC CHECKBOX -->
                    <div>
                       <h4 class="text-sm font-bold text-gray-700 mb-2 border-b pb-1">📦 Liste de Colis ({{ selectedTrip()?.parcels?.length || 0 }})</h4>
                       <ul class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
                          @for (p of selectedTrip()?.parcels; track $index) {
-                             <li class="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-100">
-                                <div><p class="text-sm font-semibold text-gray-800">{{ p.description }}</p><p class="text-xs text-gray-500">Pour: {{ p.recipient }}</p></div>
-                                <span class="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-1 rounded">{{ p.weight }} kg</span>
+                             <li class="flex items-center gap-3 bg-gray-50 p-2 rounded border border-gray-100 transition-colors"
+                                 [ngClass]="{'bg-green-50 border-green-200': p.delivered}">
+                                <!-- CHECKBOX -->
+                                <input type="checkbox" 
+                                       [checked]="p.delivered" 
+                                       (change)="toggleParcelDelivery($index)"
+                                       [disabled]="selectedTrip()?.status === 'COMPLETED'"
+                                       class="h-5 w-5 text-green-600 rounded border-gray-300 focus:ring-green-500 cursor-pointer">
+                                
+                                <div class="flex-1">
+                                   <p class="text-sm font-semibold" 
+                                      [ngClass]="{'text-green-800 line-through': p.delivered, 'text-gray-800': !p.delivered}">
+                                      {{ p.description }}
+                                   </p>
+                                   <p class="text-xs text-gray-500">Pour: {{ p.recipient }}</p>
+                                </div>
+                                <span class="text-xs font-bold px-2 py-1 rounded"
+                                      [ngClass]="p.delivered ? 'bg-green-200 text-green-800' : 'bg-indigo-100 text-indigo-800'">
+                                   {{ p.weight }} kg
+                                </span>
                              </li>
+                         } @empty {
+                             <li class="text-sm text-gray-500 italic p-2">Aucun colis enregistré.</li>
                          }
                       </ul>
+                      <p *ngIf="selectedTrip()?.status !== 'COMPLETED'" class="text-[10px] text-gray-400 mt-1 italic text-center">
+                        Cochez les colis au fur et à mesure de leur livraison.
+                      </p>
                    </div>
-              </div>
+
+                </div>
+
+              <!-- Footer Modal -->
               <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-3">
-                <button (click)="closeDetails()" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">Fermer</button>
-                <button *ngIf="selectedTrip()?.status === 'PENDING'" (click)="startMission()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700">Démarrer 🚀</button>
-                <button *ngIf="selectedTrip()?.status === 'IN_PROGRESS'" (click)="completeMission()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700">Terminer 🏁</button>
+                <button (click)="closeDetails()" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                  Fermer
+                </button>
+                <button *ngIf="selectedTrip()?.status === 'PENDING'" (click)="startMission()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                  Démarrer 🚀
+                </button>
+                <button *ngIf="selectedTrip()?.status === 'IN_PROGRESS'" (click)="completeMission()" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">
+                  Terminer 🏁
+                </button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- MODAL DEMANDES -->
+        <!-- MODAL DEMANDES SUPPLÉMENTAIRES (inchangé mais inclus pour intégrité) -->
         <div *ngIf="selectedRequestsTrip()" class="fixed inset-0 z-50 overflow-y-auto">
           <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div (click)="closeRequests()" class="fixed inset-0 bg-gray-500 bg-opacity-75"></div>
+            <div (click)="closeRequests()" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
             <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
-              <div class="bg-purple-600 px-4 py-4 sm:px-6 flex justify-between items-center text-white">
+              <!-- ... (Contenu Demandes identique au script précédent) ... -->
+               <div class="bg-purple-600 px-4 py-4 sm:px-6 flex justify-between items-center text-white">
                    <h3 class="text-lg leading-6 font-bold">Demandes Supplémentaires</h3>
                    <button (click)="closeRequests()" class="text-purple-200 hover:text-white text-2xl leading-none">&times;</button>
               </div>
@@ -149,7 +215,6 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                           } @else {
                              <p class="text-sm text-gray-600 mt-2">{{ req.description }}</p>
                           }
-                          <!-- INFO DEMANDEUR AVEC EMAIL ET SOCIÉTÉ -->
                           <div class="mt-2 pt-2 border-t border-purple-200 text-xs text-purple-700">
                              <p class="font-semibold">Demandé par : {{ req.requesterName }}</p>
                              <p class="text-purple-500">{{ req.requesterEmail }} • {{ req.requesterCompany }}</p>
@@ -203,6 +268,29 @@ export class DriverDashboardComponent {
   viewRequests(trip: any) { this.selectedRequestsTrip.set(trip); }
   closeRequests() { this.selectedRequestsTrip.set(null); }
 
+  // --- ACTION LIVRAISON COLIS ---
+  async toggleParcelDelivery(index: number) {
+     const trip = this.selectedTrip();
+     if(!trip) return;
+
+     // Copie des colis pour éviter mutation directe
+     const parcels = [...trip.parcels];
+     // Inversion du statut
+     parcels[index].delivered = !parcels[index].delivered;
+     
+     // Optimistic update UI
+     const updatedTrip = { ...trip, parcels };
+     this.selectedTrip.set(updatedTrip);
+
+     try {
+       await this.tripService.updateParcels(trip.uid, parcels);
+     } catch(err) {
+       console.error(err);
+       alert("Erreur lors de la mise à jour du colis.");
+       // Rollback si besoin
+     }
+  }
+
   async startMission() {
     const trip = this.selectedTrip();
     if (!trip) return;
@@ -217,7 +305,13 @@ export class DriverDashboardComponent {
   async completeMission() {
     const trip = this.selectedTrip();
     if (!trip) return;
-    if (confirm('Confirmez-vous la fin de cette course ?')) {
+    
+    // Vérification si tous les colis sont livrés (optionnel, juste une alerte)
+    const remaining = trip.parcels.filter((p: any) => !p.delivered).length;
+    let msg = 'Confirmez-vous la fin de cette course ?';
+    if (remaining > 0) msg += `\n⚠️ Attention : Il reste ${remaining} colis non marqués comme livrés.`;
+
+    if (confirm(msg)) {
         try {
           const tripRef = doc(this.firestore, 'trips', trip.uid);
           await updateDoc(tripRef, { status: 'COMPLETED' });

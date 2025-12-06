@@ -6,6 +6,7 @@ export interface Parcel {
   description: string;
   weight: number;
   recipient: string;
+  delivered?: boolean; // NOUVEAU : Statut de livraison
 }
 
 export interface GeoLocation {
@@ -31,7 +32,6 @@ export interface Trip {
   departure: string;
   destination: string;
   
-  // Coordonnées GPS fixes (Restaurées pour la carte)
   departureLat?: number;
   departureLng?: number;
   destinationLat?: number;
@@ -73,6 +73,12 @@ export class TripService {
       currentLocation: location,
       status: status
     });
+  }
+
+  // NOUVEAU : Mettre à jour la liste des colis (pour cocher/décocher livré)
+  updateParcels(tripId: string, parcels: Parcel[]) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, { parcels });
   }
 
   addRequest(tripId: string, request: TripRequest) {
