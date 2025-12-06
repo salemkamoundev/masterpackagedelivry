@@ -9,9 +9,11 @@ import { CompanyService } from '../../../core/services/company.service';
 import { combineLatest, map, startWith } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 
+// URLs CDN
 const iconRetinaUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png';
 const iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png';
 const shadowUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png';
+
 const iconDefault = L.icon({
   iconRetinaUrl, iconUrl, shadowUrl,
   iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], tooltipAnchor: [16, -28], shadowSize: [41, 41]
@@ -24,38 +26,31 @@ L.Marker.prototype.options.icon = iconDefault;
   imports: [CommonModule, ReactiveFormsModule],
   template: `
     <div class="flex flex-col h-full w-full relative overflow-hidden">
-      
-      <!-- Header & Filtres (Z-INDEX 1000 : sous la sidebar à 10000) -->
-      <!-- Padding réduit (p-3) et Gap réduit (gap-2) pour supprimer l'espace vide -->
-      <div class="absolute top-4 left-4 right-14 md:right-auto md:w-80 bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-lg z-[1000] border border-gray-200 flex flex-col gap-2">
-        
+      <div class="absolute top-4 left-4 right-14 md:right-auto md:w-96 bg-white p-4 rounded-xl shadow-lg z-[5000] border border-gray-200 flex flex-col gap-3">
         <div class="flex justify-between items-center">
-           <h2 class="text-base font-bold text-gray-800 flex items-center gap-2"><span class="text-lg">🌍</span> Flotte Live</h2>
-           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 animate-pulse">{{ filteredCount() }} / {{ totalCount() }} Actifs</span>
+           <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span class="text-xl">🌍</span> Flotte Live</h2>
+           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 animate-pulse">{{ filteredCount() }} / {{ totalCount() }} Actifs</span>
         </div>
-        
         <form [formGroup]="filterForm" class="flex flex-col gap-2">
-           <div class="flex items-center gap-2">
-               <input type="checkbox" formControlName="inProgressOnly" id="mapInProgress" class="h-3.5 w-3.5 text-indigo-600 border-gray-300 rounded">
-               <label for="mapInProgress" class="text-xs text-gray-700 font-medium">Uniquement "En cours"</label>
+           <div class="flex items-center gap-2 mb-1">
+               <input type="checkbox" formControlName="inProgressOnly" id="mapInProgress" class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+               <label for="mapInProgress" class="text-sm text-gray-700 font-medium">Uniquement "En cours"</label>
            </div>
-           
            <div>
-              <select formControlName="company" class="w-full text-xs border-gray-300 rounded-md bg-gray-50 py-1.5">
+              <select formControlName="company" class="w-full text-sm border-gray-300 rounded-md bg-gray-50">
                  <option value="">Toutes les sociétés</option>
                  @for (company of activeCompanies(); track company.uid) { <option [value]="company.name">{{ company.name }}</option> }
               </select>
            </div>
+           <div><input formControlName="search" type="text" placeholder="Rechercher..." class="w-full text-sm border-gray-300 rounded-md bg-gray-50"></div>
         </form>
       </div>
-      
       <div id="map" class="flex-1 w-full h-full z-0 bg-gray-100"></div>
     </div>
   `,
   styles: [`:host { display: block; height: 100%; width: 100%; } #map { height: 100%; width: 100%; }`]
 })
 export class LiveMapComponent implements AfterViewInit, OnDestroy {
-  // ... Code TypeScript inchangé ...
   private tripService = inject(TripService);
   private carService = inject(CarService);
   private userService = inject(UserService);
@@ -67,7 +62,7 @@ export class LiveMapComponent implements AfterViewInit, OnDestroy {
 
   activeCompanies = this.companyService.activeCompanies;
   
-  filterForm = this.fb.group({ company: [''], inProgressOnly: [true] }); // Suppression de 'search'
+  filterForm = this.fb.group({ company: [''], inProgressOnly: [true], search: [''] });
 
   private combinedData$ = combineLatest([
     this.tripService.getTrips(),
@@ -82,10 +77,10 @@ export class LiveMapComponent implements AfterViewInit, OnDestroy {
         const driver = users.find(u => u.uid === car?.assignedDriverId);
         return { trip, car, driver };
       });
-      
+      const searchTerm = (filters.search || '').toLowerCase();
       return enrichedTrips.filter(item => {
          const matchCompany = !filters.company || item.driver?.company === filters.company || item.trip.company === filters.company;
-         // Suppression de la logique de recherche textuelle
+         const matchSearch = !searchTerm || item.car?.plate?.toLowerCase().includes(searchTerm) || item.trip.currentLocation?.city.toLowerCase().includes(searchTerm);
          return matchCompany && (filters.inProgressOnly ? item.trip.status === 'IN_PROGRESS' : true);
       });
     })
@@ -123,9 +118,39 @@ export class LiveMapComponent implements AfterViewInit, OnDestroy {
     data.forEach(item => {
       const { trip, car, driver } = item;
       if (trip.currentLocation) {
-        const content = `<div><strong>${car?.model}</strong><br>📍 ${trip.currentLocation.city}</div>`;
-        L.marker([trip.currentLocation.lat, trip.currentLocation.lng]).bindPopup(content).addTo(this.markers);
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&waypoints=${trip.currentLocation.lat},${trip.currentLocation.lng}&travelmode=driving`;
+        
+        // POPUP AVEC TÉLÉPHONE CLICKABLE
+        const phoneDisplay = driver?.phoneNumber ? driver.phoneNumber : 'Non renseigné';
+        
+        const popupContent = `
+          <div class="font-sans p-1 min-w-[220px]">
+            <div class="flex items-center justify-between border-b border-gray-100 pb-2 mb-2">
+                <div class="font-bold text-indigo-700 text-sm">${car?.model || 'Véhicule'}</div>
+                <div class="text-xs bg-gray-100 px-1 rounded font-mono">${car?.plate}</div>
+            </div>
+            <div class="text-xs text-gray-600 space-y-1">
+               <div class="flex items-center gap-2"><span>🏢</span> <strong>${driver?.company || 'N/A'}</strong></div>
+               <div class="flex items-center gap-2"><span>🧢</span> ${driver?.email?.split('@')[0]}</div>
+               
+               <!-- AJOUT TÉLÉPHONE CLICKABLE -->
+               <div class="flex items-center gap-2 text-indigo-600 font-bold" style="font-size: 13px;">
+                  <span>📞</span> <a href="tel:${phoneDisplay}" class="hover:underline">${phoneDisplay}</a>
+               </div>
+               
+               <div class="flex items-center gap-2 text-gray-400 mt-2"><span>📍</span> ${trip.currentLocation.city}</div>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-100 text-center">
+               <a href="${googleMapsUrl}" target="_blank" class="inline-flex items-center justify-center w-full px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded hover:bg-indigo-700 text-decoration-none">📍 Suivre</a>
+            </div>
+          </div>
+        `;
+        L.marker([trip.currentLocation.lat, trip.currentLocation.lng]).bindPopup(popupContent).addTo(this.markers);
       }
     });
+    if (data.length > 0) {
+       const group = L.featureGroup(this.markers.getLayers() as L.Marker[]);
+       this.map.fitBounds(group.getBounds().pad(0.1));
+    }
   }
 }

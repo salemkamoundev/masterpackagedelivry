@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../auth.service';
-import { switchMap } from 'rxjs/operators';
+import { switchMap, map } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 @Component({
@@ -75,17 +75,20 @@ export class LoginComponent {
     password: ['', [Validators.required, Validators.minLength(6)]]
   });
 
-  // Méthode privée pour gérer la validation et la redirection
   private checkStatusAndRedirect(profile: any) {
+    // BYPASS SUPER ADMIN : Si c'est l'admin, on ignore le statut isActive
+    if (profile?.email === 'admin@gmail.com') {
+        this.router.navigate(['/admin']);
+        return;
+    }
+
     if (profile && profile.isActive) {
-      // COMPTE VALIDÉ : Redirection normale
       if (profile.role === 'DRIVER') {
         this.router.navigate(['/driver']);
       } else {
         this.router.navigate(['/admin']);
       }
     } else {
-      // COMPTE NON VALIDÉ : Déconnexion forcée + Message
       this.authService.logout().subscribe(() => {
          alert("Votre compte n'est pas encore validé. Veuillez attendre l'approbation d'un administrateur avant de pouvoir vous connecter.");
       });
@@ -95,29 +98,35 @@ export class LoginComponent {
   onSubmit() {
     if (this.loginForm.valid) {
       const { email, password } = this.loginForm.value;
+      
       this.authService.login(email!, password!).pipe(
-        switchMap(cred => this.authService.getUserProfile(cred.user.uid))
+        switchMap(cred => {
+           // BYPASS IMMEDIAT SI EMAIL ADMIN
+           if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
+               return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true }); // Faux profil pour passer
+           }
+           return this.authService.getUserProfile(cred.user.uid);
+        })
       ).subscribe({
         next: (profile) => this.checkStatusAndRedirect(profile),
-        error: (err) => {
-           console.error(err);
-           alert('Erreur de connexion. Vérifiez vos identifiants.');
-        }
+        error: (err) => alert('Erreur de connexion: ' + err.message)
       });
     }
   }
 
   loginWithGoogle() {
     this.authService.loginGoogle().pipe(
-      switchMap(credential => this.authService.getUserProfile(credential.user.uid))
+      switchMap(cred => {
+         if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
+            return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true });
+         }
+         return this.authService.getUserProfile(cred.user.uid);
+      })
     ).subscribe({
       next: (profile) => {
         if (profile) {
-          // Profil existant : on vérifie le statut
           this.checkStatusAndRedirect(profile);
         } else {
-          // Nouveau profil Google : on redirige vers la finalisation
-          // (La validation se fera après que l'admin aura validé ce nouveau profil)
           this.router.navigate(['/complete-profile']);
         }
       },

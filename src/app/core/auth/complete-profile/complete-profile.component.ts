@@ -21,7 +21,6 @@ import { take } from 'rxjs/operators';
         </div>
         
         <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
-          
           <div>
             <label class="block text-sm font-medium text-gray-700">Compte Google</label>
             <div class="mt-1 px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-gray-600 text-sm">
@@ -29,15 +28,15 @@ import { take } from 'rxjs/operators';
             </div>
           </div>
 
-          <!-- CHAMP TÉLÉPHONE AJOUTÉ -->
+          <!-- TÉLÉPHONE : TEXTE SIMPLE OBLIGATOIRE -->
           <div>
-            <label class="block text-sm font-medium text-gray-700">Numéro de téléphone</label>
-            <input formControlName="phoneNumber" type="tel" placeholder="+216 00 000 000" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2">
+            <label class="block text-sm font-medium text-gray-700">Téléphone</label>
+            <input formControlName="phoneNumber" type="text" placeholder="Numéro de téléphone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm p-2">
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Métier</label>
-            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
+            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
               <option value="" disabled>Choisir un métier</option>
               <option value="DRIVER">Chauffeur</option>
               <option value="EMPLOYEE">Employé</option>
@@ -46,7 +45,7 @@ import { take } from 'rxjs/operators';
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Société</label>
-            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
+            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
               <option value="" disabled>Choisir une société</option>
               @for (company of activeCompanies(); track company.uid) {
                  <option [value]="company.name">{{ company.name }}</option>
@@ -55,7 +54,7 @@ import { take } from 'rxjs/operators';
           </div>
 
           <button type="submit" [disabled]="profileForm.invalid"
-            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
+            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
             Valider et Accéder
           </button>
         </form>
@@ -73,7 +72,7 @@ export class CompleteProfileComponent implements OnInit {
   activeCompanies = this.companyService.activeCompanies;
 
   profileForm = this.fb.group({
-    phoneNumber: ['', [Validators.required, Validators.minLength(8)]],
+    phoneNumber: ['', Validators.required], // Validation simple
     role: ['', Validators.required],
     company: ['', Validators.required]
   });
@@ -89,19 +88,11 @@ export class CompleteProfileComponent implements OnInit {
       this.currentUser$.pipe(take(1)).subscribe(user => {
         if (user) {
           const { role, company, phoneNumber } = this.profileForm.value;
-          this.authService.createProfile(
-            user, 
-            role as 'DRIVER' | 'EMPLOYEE', 
-            company!,
-            phoneNumber!
-          ).subscribe({
+          this.authService.createProfile(user, role as any, company!, phoneNumber!).subscribe({
             next: () => {
               alert('Profil complété !');
-              if (role === 'DRIVER') {
-                this.router.navigate(['/driver']);
-              } else {
-                this.router.navigate(['/admin']);
-              }
+              if (role === 'DRIVER') this.router.navigate(['/driver']);
+              else this.router.navigate(['/admin']);
             },
             error: (err) => alert('Erreur création profil : ' + err.message)
           });

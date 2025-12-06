@@ -17,44 +17,40 @@ import { CompanyService } from '../../services/company.service';
         </div>
         
         <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-4">
-          
           <div>
             <label class="block text-sm font-medium text-gray-700">Email</label>
-            <input formControlName="email" type="email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2">
+            <input formControlName="email" type="email" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm p-2">
           </div>
-
           <div>
             <label class="block text-sm font-medium text-gray-700">Mot de passe</label>
-            <input formControlName="password" type="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2">
+            <input formControlName="password" type="password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm p-2">
           </div>
 
-          <!-- CHAMP TÉLÉPHONE AJOUTÉ -->
+          <!-- TÉLÉPHONE : TEXTE SIMPLE OBLIGATOIRE -->
           <div>
-            <label class="block text-sm font-medium text-gray-700">Numéro de téléphone</label>
-            <input formControlName="phoneNumber" type="tel" placeholder="+216 00 000 000" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm p-2">
+            <label class="block text-sm font-medium text-gray-700">Téléphone</label>
+            <input formControlName="phoneNumber" type="text" placeholder="Numéro de téléphone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm p-2">
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Métier</label>
-            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
+            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
               <option value="DRIVER">Chauffeur</option>
               <option value="EMPLOYEE">Employé</option>
             </select>
           </div>
-
           <div>
             <label class="block text-sm font-medium text-gray-700">Société</label>
-            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md border p-2">
+            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
               <option value="" disabled>Choisir une société</option>
               @for (company of activeCompanies(); track company.uid) {
                  <option [value]="company.name">{{ company.name }}</option>
               }
             </select>
-            <p *ngIf="activeCompanies().length === 0" class="mt-1 text-xs text-red-500">Aucune société active.</p>
           </div>
 
           <button type="submit" [disabled]="registerForm.invalid || activeCompanies().length === 0"
-            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400">
+            class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400">
             S'inscrire
           </button>
         </form>
@@ -78,7 +74,7 @@ export class RegisterComponent {
   registerForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(6)]],
-    phoneNumber: ['', [Validators.required, Validators.minLength(8)]], // Validation
+    phoneNumber: ['', Validators.required], // Validation simple
     role: ['DRIVER', Validators.required],
     company: ['', Validators.required]
   });
@@ -86,21 +82,12 @@ export class RegisterComponent {
   onSubmit() {
     if (this.registerForm.valid) {
       const { email, password, role, company, phoneNumber } = this.registerForm.value;
-      this.authService.register(
-        email!, 
-        password!, 
-        role as any, 
-        company!, 
-        phoneNumber!
-      ).subscribe({
+      this.authService.register(email!, password!, role as any, company!, phoneNumber!).subscribe({
         next: () => {
           alert('Compte créé ! En attente de validation.');
           this.router.navigate(['/login']);
         },
-        error: (err) => {
-          console.error('Register Error:', err);
-          alert('Erreur inscription : ' + err.message);
-        }
+        error: (err) => alert('Erreur inscription : ' + err.message)
       });
     }
   }
