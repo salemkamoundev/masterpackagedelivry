@@ -28,12 +28,10 @@ export interface TripRequest {
 
 export interface Trip {
   uid?: string;
-  
-  // Infos Texte
   departure: string;
   destination: string;
   
-  // NOUVEAU : Coordonnées GPS fixes du trajet
+  // Coordonnées GPS fixes (Restaurées pour la carte)
   departureLat?: number;
   departureLng?: number;
   destinationLat?: number;
@@ -44,10 +42,7 @@ export interface Trip {
   driverId: string;
   carId: string;
   company: string;
-  
-  // Position actuelle temps réel
   currentLocation?: GeoLocation;
-  
   parcels: Parcel[];
   extraRequests?: TripRequest[];
 }

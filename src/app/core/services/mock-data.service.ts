@@ -11,8 +11,7 @@ const TUNISIAN_CITIES = [
   { name: 'Sousse', lat: 35.8256, lng: 10.6084 },
   { name: 'Gabès', lat: 33.8815, lng: 10.0982 },
   { name: 'Bizerte', lat: 37.2744, lng: 9.8739 },
-  { name: 'Tozeur', lat: 33.9197, lng: 8.1335 },
-  { name: 'Tataouine', lat: 32.9297, lng: 10.4518 }
+  { name: 'Tozeur', lat: 33.9197, lng: 8.1335 }
 ];
 const COMPANIES = [{ name: 'Tunisia Express', email: 'contact@tn-express.tn' }, { name: 'Carthage Logistics', email: 'info@carthage.tn' }];
 
@@ -35,12 +34,31 @@ export class MockDataService {
         batch.set(companyRef, { uid: companyId, name: companyData.name, contactEmail: companyData.email, isActive: true, createdAt: new Date().toISOString() });
 
         for (let i = 0; i < 3; i++) {
-           await this.createUser(secondaryAuth, batch, 'DRIVER', companyData.name);
-           await this.createUser(secondaryAuth, batch, 'EMPLOYEE', companyData.name);
+           const driver = await this.createUser(secondaryAuth, batch, 'DRIVER', companyData.name);
+           // Création Véhicule
+           const carId = 'car_' + driver.uid;
+           const carRef = doc(this.firestore, 'cars', carId);
+           batch.set(carRef, { uid: carId, model: 'Partner', plate: '123 TN 4567', status: 'BUSY', assignedDriverId: driver.uid, company: companyData.name });
+
+           // Création Trajet
+           const start = TUNISIAN_CITIES[0];
+           const end = TUNISIAN_CITIES[1];
+           const tripRef = doc(collection(this.firestore, 'trips'));
+           
+           // Trajet EN COURS avec coords
+           batch.set(tripRef, {
+             departure: start.name, destination: end.name,
+             departureLat: start.lat, departureLng: start.lng,
+             destinationLat: end.lat, destinationLng: end.lng,
+             date: new Date().toISOString(), status: 'IN_PROGRESS',
+             driverId: driver.uid, carId, company: companyData.name,
+             currentLocation: { lat: (start.lat+end.lat)/2, lng: (start.lng+end.lng)/2, city: 'En route', lastUpdate: new Date().toISOString() },
+             parcels: []
+           });
         }
       }
       await batch.commit();
-      alert('Données générées avec numéros de téléphone !');
+      alert('Données générées avec succès !');
     } finally {
       await deleteApp(secondaryApp);
     }
@@ -49,35 +67,18 @@ export class MockDataService {
   private async createUser(secondaryAuth: Auth, batch: any, role: string, company: string) {
     const email = `${role.toLowerCase()}.${Date.now()}${Math.floor(Math.random()*100)}@test.com`;
     const password = 'Admin123';
-    // Génération Faux Numéro Tunisien
-    const phone = `+216 ${Math.floor(Math.random() * 89 + 10)} ${Math.floor(Math.random() * 899 + 100)} ${Math.floor(Math.random() * 899 + 100)}`;
-
-    let uid = '';
+    const phone = '+216 22 333 444';
+    let uid = 'mock_' + Math.random().toString(36).substr(2, 9);
     try {
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      uid = cred.user.uid;
-      await signOut(secondaryAuth);
-    } catch (e) { uid = 'mock_' + Math.random().toString(36).substr(2, 9); }
-
-    const userRef = doc(this.firestore, 'users', uid);
-    batch.set(userRef, { uid, email, role, company, phoneNumber: phone, isActive: true, createdAt: new Date() });
+       const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+       uid = cred.user.uid;
+       await signOut(secondaryAuth);
+    } catch(e) {}
     
-    // Création véhicule et trajet auto pour test map
-    if(role === 'DRIVER') {
-       const carId = 'car_' + uid;
-       const carRef = doc(this.firestore, 'cars', carId);
-       batch.set(carRef, { uid: carId, model: 'Peugeot Partner', plate: '123 TN 4567', status: 'BUSY', assignedDriverId: uid, company });
-       
-       const tripRef = doc(collection(this.firestore, 'trips'));
-       const start = TUNISIAN_CITIES[0];
-       const end = TUNISIAN_CITIES[1];
-       const currentLocation = { lat: (start.lat + end.lat)/2, lng: (start.lng + end.lng)/2, city: 'En route', lastUpdate: new Date().toISOString() };
-       
-       batch.set(tripRef, { 
-          departure: start.name, destination: end.name, date: new Date().toISOString(), 
-          status: 'IN_PROGRESS', driverId: uid, carId, company, currentLocation, parcels: [] 
-       });
-    }
+    const userRef = doc(this.firestore, 'users', uid);
+    const userData = { uid, email, role, company, phoneNumber: phone, isActive: true, createdAt: new Date() };
+    batch.set(userRef, userData);
+    return userData;
   }
 
   private async clearFirestore() {

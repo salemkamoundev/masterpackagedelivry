@@ -75,11 +75,20 @@ export class LoginComponent {
     password: ['', [Validators.required, Validators.minLength(6)]]
   });
 
-  private redirectUser(profile: any) {
-    if (profile?.role === 'DRIVER') {
-      this.router.navigate(['/driver']);
+  // Méthode privée pour gérer la validation et la redirection
+  private checkStatusAndRedirect(profile: any) {
+    if (profile && profile.isActive) {
+      // COMPTE VALIDÉ : Redirection normale
+      if (profile.role === 'DRIVER') {
+        this.router.navigate(['/driver']);
+      } else {
+        this.router.navigate(['/admin']);
+      }
     } else {
-      this.router.navigate(['/admin']);
+      // COMPTE NON VALIDÉ : Déconnexion forcée + Message
+      this.authService.logout().subscribe(() => {
+         alert("Votre compte n'est pas encore validé. Veuillez attendre l'approbation d'un administrateur avant de pouvoir vous connecter.");
+      });
     }
   }
 
@@ -89,8 +98,11 @@ export class LoginComponent {
       this.authService.login(email!, password!).pipe(
         switchMap(cred => this.authService.getUserProfile(cred.user.uid))
       ).subscribe({
-        next: (profile) => this.redirectUser(profile),
-        error: (err) => alert('Erreur de connexion: ' + err.message)
+        next: (profile) => this.checkStatusAndRedirect(profile),
+        error: (err) => {
+           console.error(err);
+           alert('Erreur de connexion. Vérifiez vos identifiants.');
+        }
       });
     }
   }
@@ -101,8 +113,11 @@ export class LoginComponent {
     ).subscribe({
       next: (profile) => {
         if (profile) {
-          this.redirectUser(profile);
+          // Profil existant : on vérifie le statut
+          this.checkStatusAndRedirect(profile);
         } else {
+          // Nouveau profil Google : on redirige vers la finalisation
+          // (La validation se fera après que l'admin aura validé ce nouveau profil)
           this.router.navigate(['/complete-profile']);
         }
       },

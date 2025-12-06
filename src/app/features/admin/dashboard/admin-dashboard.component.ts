@@ -13,14 +13,13 @@ import { toSignal } from '@angular/core/rxjs-interop';
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       
-      <!-- Mobile Overlay -->
-      <div *ngIf="isMobileMenuOpen" (click)="toggleMobileMenu()" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity"></div>
+      <!-- Mobile Overlay (Z-Index doit être sous la sidebar mais sur le contenu) -->
+      <div *ngIf="isMobileMenuOpen" (click)="toggleMobileMenu()" class="fixed inset-0 bg-black bg-opacity-50 z-[9998] lg:hidden transition-opacity"></div>
 
-      <!-- SIDEBAR -->
-      <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform lg:translate-x-0"
+      <!-- SIDEBAR (Z-INDEX 10000 pour être sûr d'être au-dessus de la carte) -->
+      <aside class="fixed inset-y-0 left-0 z-[10000] w-64 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform lg:translate-x-0"
              [ngClass]="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
         
-        <!-- Logo -->
         <div class="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
           <div class="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-lg">
             <span class="text-xl">🚚</span>
@@ -28,7 +27,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
           <span class="text-lg font-bold tracking-wide text-gray-100">Master<span class="text-indigo-400">Delivery</span></span>
         </div>
 
-        <!-- Navigation -->
         <nav class="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
           <p class="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Menu</p>
           
@@ -64,19 +62,46 @@ import { toSignal } from '@angular/core/rxjs-interop';
              <span class="mr-3 text-xl">🚪</span> <span class="font-medium">Déconnexion</span>
            </button>
         </nav>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-950/50">
+           @if (userProfile(); as profile) {
+               @if (profile.email === 'admin@gmail.com') {
+                   <div class="flex items-center gap-3">
+                      <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700">A</div>
+                      <div class="overflow-hidden">
+                         <p class="text-sm font-medium text-white truncate">Admin</p>
+                         <p class="text-xs text-indigo-300 truncate">Super Admin</p>
+                      </div>
+                   </div>
+               } @else {
+                   <div class="flex items-center gap-3">
+                      <div class="h-10 w-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold border-2 border-slate-700 text-lg">
+                         {{ profile.email.charAt(0).toUpperCase() }}
+                      </div>
+                      <div class="overflow-hidden">
+                         <p class="text-sm font-medium text-white truncate" title="{{ profile.email }}">{{ profile.email }}</p>
+                         <p class="text-xs text-indigo-300 truncate">{{ profile.role }} | {{ profile.company }}</p>
+                      </div>
+                   </div>
+               }
+           } @else {
+               <div class="flex items-center gap-3 animate-pulse">
+                   <div class="h-10 w-10 rounded-full bg-slate-700"></div>
+                   <div class="flex-1 space-y-2"><div class="h-2 bg-slate-700 rounded w-3/4"></div><div class="h-2 bg-slate-700 rounded w-1/2"></div></div>
+               </div>
+           }
+        </div>
       </aside>
 
       <!-- MAIN CONTENT -->
       <div class="lg:pl-64 flex flex-col h-screen w-full relative transition-all duration-300">
-        <!-- Header Mobile Uniquement -->
-        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 lg:hidden shrink-0 z-30 relative">
+        <!-- Header Mobile (Z-INDEX ÉLEVÉ) -->
+        <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 lg:hidden shrink-0 z-[9997] relative">
              <span class="font-bold text-gray-800">MasterDelivery</span>
              <button (click)="toggleMobileMenu()" class="text-gray-500 p-2 border rounded">☰</button>
         </header>
 
-        <!-- Zone de contenu principale : Pas de padding global, pas de scroll global -->
-        <!-- Cela permet au composant enfant (la carte) de gérer sa propre hauteur -->
-        <main class="flex-1 overflow-hidden relative flex flex-col bg-gray-50">
+        <main class="flex-1 overflow-y-auto relative flex flex-col bg-gray-50 p-0">
              <router-outlet></router-outlet>
         </main>
       </div>
