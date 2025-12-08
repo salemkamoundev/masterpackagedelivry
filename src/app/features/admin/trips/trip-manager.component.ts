@@ -2,7 +2,7 @@ import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
 import { Router } from '@angular/router';
-import { TripService, Trip } from '../../../core/services/trip.service';
+import { TripService, Trip, Parcel } from '../../../core/services/trip.service';
 import { CarService, Car } from '../../../core/services/car.service';
 import { AuthService, UserProfile } from '../../../core/auth/auth.service';
 import { CompanyService } from '../../../core/services/company.service';
@@ -191,35 +191,14 @@ import { combineLatest, of } from 'rxjs';
                    <div formArrayName="parcels" class="space-y-3">
                       @for (parcel of requestParcelsArray.controls; track $index) {
                          <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm border border-indigo-100 relative grid grid-cols-1 md:grid-cols-2 gap-2">
-                             
                              <div class="absolute right-2 top-2">
                                 <button type="button" (click)="removeRequestParcel($index)" class="text-red-400 hover:text-red-600 font-bold">✕</button>
                              </div>
-                             
-                             <div class="col-span-1 md:col-span-2">
-                               <label class="text-[10px] text-gray-500 uppercase font-bold">Désignation</label>
-                               <input formControlName="description" placeholder="Ex: Documents Banque" class="w-full text-sm border-gray-300 rounded p-1 border">
-                             </div>
-                             
-                             <div>
-                               <label class="text-[10px] text-gray-500 uppercase font-bold">Nom Client</label>
-                               <input formControlName="recipientName" placeholder="Nom" class="w-full text-sm border-gray-300 rounded p-1 border">
-                             </div>
-                             
-                             <div>
-                               <label class="text-[10px] text-gray-500 uppercase font-bold">Téléphone</label>
-                               <input formControlName="recipientPhone" placeholder="Tél" class="w-full text-sm border-gray-300 rounded p-1 border">
-                             </div>
-                             
-                             <div class="col-span-1 md:col-span-2">
-                               <label class="text-[10px] text-gray-500 uppercase font-bold">Adresse Complète</label>
-                               <input formControlName="recipientAddress" placeholder="Adresse de livraison" class="w-full text-sm border-gray-300 rounded p-1 border">
-                             </div>
-
-                             <div class="md:col-span-1">
-                               <label class="text-[10px] text-gray-500 uppercase font-bold">Poids (Kg)</label>
-                               <input type="number" formControlName="weight" class="w-full text-sm border-gray-300 rounded p-1 border">
-                             </div>
+                             <div class="col-span-1 md:col-span-2"><label class="text-[10px] text-gray-500 uppercase font-bold">Désignation</label><input formControlName="description" placeholder="Ex: Documents Banque" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div><label class="text-[10px] text-gray-500 uppercase font-bold">Nom Client</label><input formControlName="recipientName" placeholder="Nom" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div><label class="text-[10px] text-gray-500 uppercase font-bold">Téléphone</label><input formControlName="recipientPhone" placeholder="Tél" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div class="col-span-1 md:col-span-2"><label class="text-[10px] text-gray-500 uppercase font-bold">Adresse Complète</label><input formControlName="recipientAddress" placeholder="Adresse de livraison" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div class="md:col-span-1"><label class="text-[10px] text-gray-500 uppercase font-bold">Poids (Kg)</label><input type="number" formControlName="weight" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
                          </div>
                       }
                       @if (requestParcelsArray.length === 0) {
@@ -333,7 +312,6 @@ export class TripManagerComponent {
       };
 
       if (formValue.type === 'PARCEL') {
-         // CORRECTION TS: Utilisation de la coalescence nulle (?? [])
          const parcels = formValue.parcels ?? [];
          requestData.parcels = parcels; 
          requestData.description = `${parcels.length} colis ajoutés`;
@@ -381,5 +359,10 @@ export class TripManagerComponent {
   }
   async deleteTrip(trip: Trip) { if (confirm('Supprimer ?')) await this.tripService.deleteTrip(trip.uid!); }
   openChat(user: UserProfile) { this.chatService.startChatWith(user); this.router.navigate(['/admin/chat']); }
-  handleTrackClick(trip: Trip) { window.open(`https://www.google.com/maps/dir/?api=1&origin=$?q=${encodeURIComponent(trip.destination)}&saddr=${encodeURIComponent(trip.departure)}&travelmode=driving`, '_blank'); }
+
+  // FIX: URL CORRECTE POUR L'ITINÉRAIRE
+  handleTrackClick(trip: Trip) { 
+     const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`;
+     window.open(url, '_blank'); 
+  }
 }

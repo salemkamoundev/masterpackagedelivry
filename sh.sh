@@ -1,314 +1,378 @@
 #!/bin/bash
 
-TARGET="src/app/features/driver/dashboard/driver-dashboard.component.ts"
+TARGET="src/app/features/admin/trips/trip-manager.component.ts"
 
-echo "🛠️ Correction : Fusion des demandes (extraRequests) avec les colis principaux dans $TARGET..."
+echo "📍 Correction du lien Google Maps (Itinéraire) dans $TARGET..."
 
 cat << 'EOF' > "$TARGET"
 import { Component, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AuthService } from '../../../core/auth/auth.service';
+import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
+import { Router } from '@angular/router';
 import { TripService, Trip, Parcel } from '../../../core/services/trip.service';
-import { CarService } from '../../../core/services/car.service';
+import { CarService, Car } from '../../../core/services/car.service';
+import { AuthService, UserProfile } from '../../../core/auth/auth.service';
+import { CompanyService } from '../../../core/services/company.service';
+import { UserService } from '../../../core/services/user.service';
+import { ChatService } from '../../../core/services/chat.service';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { combineLatest, map } from 'rxjs';
-import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
+import { startWith, map, switchMap, shareReplay } from 'rxjs/operators';
+import { combineLatest, of } from 'rxjs';
 
 @Component({
-  selector: 'app-driver-dashboard',
+  selector: 'app-trip-manager',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ReactiveFormsModule],
   template: `
-    <div class="min-h-screen bg-gray-50 flex flex-col">
-      <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
-        <div class="max-w-7xl mx-auto py-4 px-4 flex justify-between items-center">
-          <div class="flex items-center gap-2">
-             <span class="text-2xl">🧢</span>
-             <h1 class="text-xl font-bold text-gray-900">Espace Chauffeur</h1>
-          </div>
-          <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-1 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
-        </div>
-      </header>
-  
-      <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 relative">
-        
-        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-           <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <span>📋</span> Missions
-           </h2>
-           
-           <div class="flex bg-white p-1 rounded-lg shadow-sm border border-gray-200">
-              <button (click)="setFilter('ACTIVE')" 
-                      class="px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2"
-                      [ngClass]="filterMode() === 'ACTIVE' ? 'bg-indigo-600 text-white shadow' : 'text-gray-500 hover:bg-gray-50'">
-                 <span>🚀</span> En cours
-                 <span class="bg-white/20 px-1.5 rounded text-xs">{{ activeCount() }}</span>
-              </button>
-              <button (click)="setFilter('ALL')" 
-                      class="px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2"
-                      [ngClass]="filterMode() === 'ALL' ? 'bg-gray-800 text-white shadow' : 'text-gray-500 hover:bg-gray-50'">
-                 <span>🗂️</span> Historique
-                 <span class="bg-white/20 px-1.5 rounded text-xs">{{ missions().length }}</span>
-              </button>
-           </div>
-        </div>
+    <div class="space-y-6 p-6">
+      <div class="flex justify-between items-center gap-4">
+        <h2 class="text-2xl font-bold text-gray-800">Suivi des Trajets</h2>
+        <button (click)="toggleForm()" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 shadow-md transition-colors">
+           {{ showForm ? 'Fermer' : 'Nouveau Trajet' }}
+        </button>
+      </div>
 
-        <div *ngIf="filteredMissions().length > 0; else noMissions">
-           <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              @for (trip of filteredMissions(); track trip.uid) {
-                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
-                      [ngClass]="{
-                        'border-indigo-500': trip.status === 'PENDING',
-                        'border-blue-500': trip.status === 'IN_PROGRESS',
-                        'border-green-500': trip.status === 'COMPLETED'
-                      }">
-                    
-                    <div class="p-5">
-                        <div class="flex justify-between items-start mb-3">
-                           <div>
-                              <h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3>
-                              <p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p>
-                           </div>
-                           <span class="px-2 py-1 text-xs font-bold rounded uppercase tracking-wide"
-                                [ngClass]="{
-                                  'bg-indigo-100 text-indigo-700': trip.status === 'PENDING',
-                                  'bg-blue-100 text-blue-700': trip.status === 'IN_PROGRESS',
-                                  'bg-green-100 text-green-700': trip.status === 'COMPLETED'
-                                }">
-                              {{ trip.status === 'IN_PROGRESS' ? 'En Cours' : (trip.status === 'COMPLETED' ? 'Terminé' : 'En attente') }}
-                           </span>
-                        </div>
-                        
-                        <div class="space-y-2 text-sm text-gray-600 mb-4">
-                           <div class="flex items-center gap-2">
-                              <span>📅</span> {{ trip.date | date:'dd/MM HH:mm' }}
-                           </div>
-                           <div class="flex items-center gap-2">
-                              <span>📦</span> {{ getMergedParcels(trip).length }} Colis à livrer
-                           </div>
-                           <div *ngIf="trip.extraRequests && trip.extraRequests.length > 0" class="text-xs text-orange-600 font-bold flex items-center gap-1">
-                              <span>⚠️</span> {{ trip.extraRequests.length }} Demande(s) ajoutée(s)
-                           </div>
-                        </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200" [formGroup]="filterForm">
+         <select formControlName="company" class="w-full border-gray-300 rounded-md shadow-sm border p-2 text-sm bg-gray-50">
+            <option value="">Toutes les sociétés</option>
+            @for (company of activeCompanies(); track company.uid) {
+               <option [value]="company.name">{{ company.name }}</option>
+            }
+         </select>
+      </div>
 
-                        <button (click)="viewDetails(trip)" class="w-full bg-gray-900 text-white py-2.5 rounded-lg font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                           <span>👁️</span> Voir Détails & Colis
-                        </button>
-                    </div>
-                 </div>
-              }
-           </div>
-        </div>
-        
-        <ng-template #noMissions>
-            <div class="flex flex-col items-center justify-center py-20 text-gray-400">
-                <span class="text-6xl mb-4 opacity-50">{{ filterMode() === 'ACTIVE' ? '✅' : '📭' }}</span>
-                <p class="text-lg font-bold text-gray-600">
-                    {{ filterMode() === 'ACTIVE' ? 'Aucune mission en cours.' : 'Aucun historique disponible.' }}
-                </p>
+      <div *ngIf="showForm" class="bg-white p-6 rounded-lg shadow-xl border-l-4 border-indigo-500 mb-6 animate-fade-in">
+         <h3 class="text-lg font-bold text-gray-800 mb-4">Créer un nouveau trajet</h3>
+         
+         <form [formGroup]="tripForm" (ngSubmit)="createTrip()">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+               <div>
+                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Départ</label>
+                 <input formControlName="departure" placeholder="Ville de départ" class="w-full border p-2 rounded focus:ring-indigo-500">
+               </div>
+               <div>
+                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Destination</label>
+                 <input formControlName="destination" placeholder="Ville d'arrivée" class="w-full border p-2 rounded focus:ring-indigo-500">
+               </div>
+               <div>
+                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Date</label>
+                 <input type="datetime-local" formControlName="date" class="w-full border p-2 rounded focus:ring-indigo-500">
+               </div>
+               <div>
+                  <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Véhicule</label>
+                  <select formControlName="carId" class="w-full border p-2 rounded bg-white">
+                     <option value="">-- Choisir --</option>
+                     @for (car of cars$ | async; track car.uid) { 
+                       <option [value]="car.uid">{{ car.model }} ({{ car.plate }})</option> 
+                     }
+                  </select>
+               </div>
             </div>
-        </ng-template>
 
-        @if (selectedTrip(); as trip) {
-            <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up my-auto">
-                    
-                    <div class="bg-gray-900 text-white p-6 flex justify-between items-start">
-                        <div>
-                        <h3 class="font-bold text-xl">{{ trip.destination }}</h3>
-                        <p class="text-gray-300 text-sm mt-1">Départ: {{ trip.departure }}</p>
-                        </div>
-                        <button (click)="closeDetails()" class="text-gray-400 hover:text-white text-2xl font-bold">✕</button>
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+               <div class="flex justify-between items-center mb-4">
+                  <h4 class="font-bold text-gray-700 flex items-center gap-2">📦 Liste des Colis ({{ parcelsArray.length }})</h4>
+                  <button type="button" (click)="addParcel()" class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold hover:bg-green-200 border border-green-200">
+                    + Ajouter Colis
+                  </button>
+               </div>
+
+               <div formArrayName="parcels" class="space-y-3">
+                  @for (parcel of parcelsArray.controls; track $index) {
+                    <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm border border-gray-200 flex flex-col md:flex-row gap-3 items-start md:items-center relative group">
+                       <div class="absolute -left-2 -top-2 bg-indigo-600 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full font-bold">
+                         {{ $index + 1 }}
+                       </div>
+                       <div class="flex-1 w-full"><input formControlName="description" placeholder="Désignation" class="w-full text-sm border-gray-300 rounded p-1.5 border"></div>
+                       <div class="w-full md:w-32"><input formControlName="recipientName" placeholder="Nom Client" class="w-full text-sm border-gray-300 rounded p-1.5 border"></div>
+                       <div class="w-full md:w-32"><input formControlName="recipientPhone" placeholder="Tél" class="w-full text-sm border-gray-300 rounded p-1.5 border"></div>
+                       <div class="flex-1 w-full"><input formControlName="recipientAddress" placeholder="Adresse" class="w-full text-sm border-gray-300 rounded p-1.5 border"></div>
+                       <div class="w-full md:w-20"><input type="number" formControlName="weight" placeholder="Kg" class="w-full text-sm border-gray-300 rounded p-1.5 border"></div>
+                       <button type="button" (click)="removeParcel($index)" class="text-red-500 hover:text-red-700 font-bold px-2">✕</button>
                     </div>
+                  }
+               </div>
+            </div>
 
-                    <div class="p-6 max-h-[70vh] overflow-y-auto">
-                        
-                        <div class="flex gap-3 mb-8">
-                            <button *ngIf="trip.status === 'PENDING'" (click)="updateStatus('IN_PROGRESS')" class="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 flex items-center justify-center gap-2">
-                                🚀 Démarrer la Mission
-                            </button>
-                            <button *ngIf="trip.status === 'IN_PROGRESS'" (click)="updateStatus('COMPLETED')" class="flex-1 bg-gray-800 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-gray-900 flex items-center justify-center gap-2">
-                                🏁 Terminer la Mission
-                            </button>
-                        </div>
+            <div class="flex justify-end">
+               <button type="submit" [disabled]="tripForm.invalid" class="bg-indigo-600 text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                 Valider le Trajet
+               </button>
+            </div>
+         </form>
+      </div>
 
-                        <h4 class="font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between items-center">
-                            <span>📦 Colis à livrer</span>
-                            <span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">
-                               {{ countDelivered(getMergedParcels(trip)) }} / {{ getMergedParcels(trip).length }} livrés
-                            </span>
-                        </h4>
-
-                        <div class="space-y-4">
-                            @for (parcel of getMergedParcels(trip); track $index) {
-                                <div class="border rounded-xl p-4 transition-colors relative" 
-                                    [ngClass]="parcel.delivered ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'">
-                                    
-                                    <span *ngIf="isExtraParcel(trip, parcel)" class="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border border-orange-200">
-                                        + Ajouté
-                                    </span>
-
-                                    <div class="flex justify-between items-start">
-                                        <div class="flex-1">
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <span class="font-bold text-lg text-gray-800">{{ parcel.description }}</span>
-                                                <span *ngIf="parcel.weight" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{{ parcel.weight }}kg</span>
-                                            </div>
-                                            
-                                            <div class="text-sm space-y-1 mt-2">
-                                                <p class="font-bold text-indigo-900">👤 {{ parcel.recipientName }}</p>
-                                                <p class="text-gray-600 flex items-start gap-1">
-                                                    <span>📍</span> 
-                                                    <span>{{ parcel.recipientAddress || 'Adresse non spécifiée' }}</span>
-                                                </p>
-                                                <p class="text-gray-600 flex items-center gap-1" *ngIf="parcel.recipientPhone">
-                                                    <span>📞</span> 
-                                                    <a [href]="'tel:' + parcel.recipientPhone" class="text-blue-600 underline font-bold">{{ parcel.recipientPhone }}</a>
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div class="ml-4 flex flex-col items-center gap-1 mt-6">
-                                            <button (click)="toggleParcelDelivery(trip, parcel)" 
-                                                    class="w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all border-2"
-                                                    [ngClass]="parcel.delivered ? 'bg-green-500 text-white border-green-600 scale-110' : 'bg-white text-gray-300 border-gray-200 hover:border-gray-400'">
-                                                {{ parcel.delivered ? '✓' : '' }}
-                                            </button>
-                                            <span class="text-[10px] font-bold uppercase" [class.text-green-600]="parcel.delivered" [class.text-gray-400]="!parcel.delivered">
-                                                {{ parcel.delivered ? 'Livré' : 'À faire' }}
-                                            </span>
-                                        </div>
-                                    </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+         <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+               <thead class="bg-gray-50">
+                  <tr>
+                     <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Trajet</th>
+                     <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Colis</th>
+                     <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Statut</th>
+                     <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Chauffeur</th>
+                     <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
+                  </tr>
+               </thead>
+               <tbody class="bg-white divide-y divide-gray-200">
+                  @for (trip of filteredTrips(); track trip.uid) {
+                     <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4">
+                           <div class="flex flex-col">
+                              <span class="text-sm font-bold text-gray-900">{{ trip.departure }} ➝ {{ trip.destination }}</span>
+                              <span class="text-xs text-gray-500">{{ trip.company }}</span>
+                              <span class="text-xs text-gray-400 mt-1">{{ trip.date | date:'dd/MM HH:mm' }}</span>
+                           </div>
+                        </td>
+                        <td class="px-6 py-4">
+                           <div class="text-xs space-y-1">
+                              @for (parcel of trip.parcels; track $index) {
+                                <div class="flex items-center gap-1">
+                                  <span [class]="parcel.delivered ? 'text-green-600' : 'text-gray-600'">{{ parcel.delivered ? '✅' : '📦' }}</span>
+                                  <span class="font-medium">{{ parcel.description }}</span>
                                 </div>
-                            }
-                            @if (getMergedParcels(trip).length === 0) {
-                                <div class="text-center py-6 text-gray-400 italic">Aucun colis listé pour ce trajet.</div>
-                            }
-                        </div>
+                              }
+                           </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                           <span class="px-2 py-1 text-xs font-bold rounded-full" 
+                                 [ngClass]="{'bg-blue-100 text-blue-800': trip.status === 'IN_PROGRESS', 'bg-green-100 text-green-800': trip.status === 'COMPLETED', 'bg-yellow-100 text-yellow-800': trip.status === 'PENDING'}">
+                              {{ trip.status }}
+                           </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                           <div class="flex items-center gap-3">
+                              <div *ngIf="trip.driverEmail; else noDriver" class="flex items-center gap-2">
+                                 <div>
+                                    <div class="text-sm font-medium text-gray-900">{{ trip.driverEmail }}</div>
+                                    <div class="text-xs text-gray-500">{{ trip.driverPhone || 'Tél inconnu' }}</div>
+                                 </div>
+                                 <button *ngIf="trip.driverProfile" (click)="openChat(trip.driverProfile)" class="h-8 w-8 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 shadow-sm">💬</button>
+                              </div>
+                              <ng-template #noDriver><span class="text-xs text-gray-400 italic bg-gray-100 px-2 py-1 rounded">Non assigné</span></ng-template>
+                           </div>
+                        </td>
+                        <td class="px-6 py-4 text-right whitespace-nowrap">
+                           <div class="flex justify-end items-center gap-2">
+                              <button (click)="openRequestModal(trip)" class="p-2 text-xs font-medium bg-purple-50 text-purple-700 rounded hover:bg-purple-100 border border-purple-200">➕</button>
+                              <button (click)="handleTrackClick(trip)" class="p-2 text-xs font-medium bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200">📍</button>
+                              <button (click)="deleteTrip(trip)" class="p-2 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 border border-red-200">🗑️</button>
+                           </div>
+                        </td>
+                     </tr>
+                  } @empty {
+                     <tr><td colspan="5" class="p-8 text-center text-gray-500">Aucun trajet trouvé.</td></tr>
+                  }
+               </tbody>
+            </table>
+         </div>
+      </div>
 
-                    </div>
+      <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm overflow-y-auto">
+          <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl animate-fade-in-up my-auto max-h-[90vh] overflow-y-auto">
+             <h3 class="font-bold text-xl mb-4 text-gray-800 border-b pb-2">Ajouter des colis supplémentaires</h3>
+             
+             <form [formGroup]="requestForm" (ngSubmit)="submitRequest()">
+                
+                <div class="mb-4">
+                   <label class="block text-sm font-medium text-gray-700 mb-1">Type de demande</label>
+                   <select formControlName="type" class="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-gray-50 font-bold">
+                      <option value="PARCEL">📦 Ajout de Colis</option>
+                      <option value="PASSENGER">🙋 Ajout de Passager</option>
+                   </select>
                 </div>
-            </div>
-        }
-      </main>
+
+                <div *ngIf="requestForm.get('type')?.value === 'PASSENGER'" class="mb-4">
+                   <label class="block text-sm font-medium text-gray-700 mb-1">Détails Passager</label>
+                   <textarea formControlName="description" rows="3" class="w-full border-gray-300 rounded-md shadow-sm border p-2 bg-gray-50" placeholder="Nom, contact..."></textarea>
+                </div>
+
+                <div *ngIf="requestForm.get('type')?.value === 'PARCEL'" class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-4">
+                   <div class="flex justify-between items-center mb-3">
+                      <label class="block text-sm font-bold text-indigo-900">Liste des Colis à ajouter</label>
+                      <button type="button" (click)="addRequestParcel()" class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-full font-bold hover:bg-indigo-700 shadow-sm">
+                        + Ajouter Colis
+                      </button>
+                   </div>
+
+                   <div formArrayName="parcels" class="space-y-3">
+                      @for (parcel of requestParcelsArray.controls; track $index) {
+                         <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm border border-indigo-100 relative grid grid-cols-1 md:grid-cols-2 gap-2">
+                             <div class="absolute right-2 top-2">
+                                <button type="button" (click)="removeRequestParcel($index)" class="text-red-400 hover:text-red-600 font-bold">✕</button>
+                             </div>
+                             <div class="col-span-1 md:col-span-2"><label class="text-[10px] text-gray-500 uppercase font-bold">Désignation</label><input formControlName="description" placeholder="Ex: Documents Banque" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div><label class="text-[10px] text-gray-500 uppercase font-bold">Nom Client</label><input formControlName="recipientName" placeholder="Nom" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div><label class="text-[10px] text-gray-500 uppercase font-bold">Téléphone</label><input formControlName="recipientPhone" placeholder="Tél" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div class="col-span-1 md:col-span-2"><label class="text-[10px] text-gray-500 uppercase font-bold">Adresse Complète</label><input formControlName="recipientAddress" placeholder="Adresse de livraison" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                             <div class="md:col-span-1"><label class="text-[10px] text-gray-500 uppercase font-bold">Poids (Kg)</label><input type="number" formControlName="weight" class="w-full text-sm border-gray-300 rounded p-1 border"></div>
+                         </div>
+                      }
+                      @if (requestParcelsArray.length === 0) {
+                        <div class="text-center text-gray-400 text-sm py-2">Aucun colis dans la demande.</div>
+                      }
+                   </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t">
+                   <button type="button" (click)="closeRequestModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Annuler</button>
+                   <button type="submit" [disabled]="requestForm.invalid" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md font-bold disabled:opacity-50">
+                     Envoyer la demande
+                   </button>
+                </div>
+             </form>
+          </div>
+      </div>
     </div>
   `
 })
-export class DriverDashboardComponent {
-  private authService = inject(AuthService);
+export class TripManagerComponent {
+  private fb = inject(FormBuilder);
   private tripService = inject(TripService);
   private carService = inject(CarService);
-  private firestore = inject(Firestore);
+  private authService = inject(AuthService);
+  private companyService = inject(CompanyService);
+  private userService = inject(UserService);
+  private chatService = inject(ChatService);
+  private router = inject(Router);
   
-  private user$ = this.authService.user$;
-  private cars$ = this.carService.getCars();
-  private allTrips$ = this.tripService.getTrips();
+  showForm = false;
+  cars$ = this.carService.getCars();
+  activeCompanies = this.companyService.activeCompanies;
+  selectedTripForRequest: Trip | null = null;
   
-  selectedTrip = signal<Trip | null>(null);
-  filterMode = signal<'ACTIVE' | 'ALL'>('ACTIVE');
+  adminProfile$ = this.authService.user$.pipe(
+    switchMap(user => {
+        if (user?.email === 'admin@gmail.com') return of({ uid: user.uid, email: user.email, role: 'SUPER_ADMIN', company: 'System' } as UserProfile);
+        return user ? this.authService.getUserProfile(user.uid) : of(null);
+    }),
+    shareReplay(1)
+  );
 
-  missions = toSignal(combineLatest([this.user$, this.cars$, this.allTrips$]).pipe(map(([user, cars, trips]) => {
-        if (!user) return [];
-        const myCar = cars.find(c => c.assignedDriverId === user.uid);
-        if (!myCar) return [];
-        return trips.filter(t => t.carId === myCar.uid);
-  })), { initialValue: [] });
+  adminCompany = toSignal(this.adminProfile$.pipe(map(p => p?.company || null)));
+  filterForm = this.fb.group({ company: [''], inProgressOnly: [false] });
+  filterValues = toSignal(this.filterForm.valueChanges.pipe(startWith(this.filterForm.value)), { initialValue: this.filterForm.value });
 
-  filteredMissions = computed(() => {
-    const all = this.missions();
-    const mode = this.filterMode();
-    if (mode === 'ALL') return all;
-    return all.filter(t => t.status !== 'COMPLETED');
+  tripForm = this.fb.group({
+    departure: ['', Validators.required],
+    destination: ['', Validators.required],
+    date: ['', Validators.required],
+    carId: ['', Validators.required],
+    parcels: this.fb.array([]) 
   });
 
-  activeCount = computed(() => this.missions().filter(t => t.status !== 'COMPLETED').length);
+  get parcelsArray() { return this.tripForm.get('parcels') as FormArray; }
 
-  setFilter(mode: 'ACTIVE' | 'ALL') { this.filterMode.set(mode); }
-  viewDetails(trip: Trip) { this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); }
-  closeDetails() { this.selectedTrip.set(null); }
-  
-  async updateStatus(status: 'IN_PROGRESS' | 'COMPLETED') {
-     const currentTrip = this.selectedTrip();
-     if(currentTrip && currentTrip.uid) {
-         await updateDoc(doc(this.firestore, 'trips', currentTrip.uid), { status });
-         this.closeDetails();
-     }
+  addParcel() {
+    this.parcelsArray.push(this.createParcelGroup());
+  }
+  removeParcel(index: number) { this.parcelsArray.removeAt(index); }
+
+  requestForm = this.fb.group({
+    type: ['PARCEL', Validators.required],
+    description: [''], 
+    parcels: this.fb.array([]) 
+  });
+
+  get requestParcelsArray() { return this.requestForm.get('parcels') as FormArray; }
+
+  private createParcelGroup(): FormGroup {
+    return this.fb.group({
+      description: ['', Validators.required],
+      recipientName: ['', Validators.required],
+      recipientPhone: ['', Validators.required],
+      recipientAddress: ['', Validators.required],
+      weight: [1, [Validators.required, Validators.min(0.1)]],
+      delivered: [false]
+    });
   }
 
-  // --- NOUVELLE LOGIQUE : Fusion & Sauvegarde Complexe ---
-
-  // 1. Fusionne visuellement les colis de base et les colis des 'extraRequests'
-  getMergedParcels(trip: Trip): Parcel[] {
-      const mainParcels = trip.parcels || [];
-      let extraParcels: Parcel[] = [];
-
-      if (trip.extraRequests) {
-          trip.extraRequests.forEach(req => {
-              // On accepte les colis des demandes 'PARCEL' (validées ou en attente, selon votre règle métier. Ici on affiche tout pour le chauffeur)
-              if (req.type === 'PARCEL' && req.parcels) {
-                  extraParcels = [...extraParcels, ...req.parcels];
-              }
-          });
-      }
-      return [...mainParcels, ...extraParcels];
+  addRequestParcel() {
+    this.requestParcelsArray.push(this.createParcelGroup());
   }
 
-  // 2. Vérifie si un colis vient des extras (pour le badge)
-  isExtraParcel(trip: Trip, parcel: Parcel): boolean {
-      const mainParcels = trip.parcels || [];
-      // Vérification par référence ou contenu strict (ici simplifié)
-      return !mainParcels.some(p => p.description === parcel.description && p.recipientName === parcel.recipientName);
+  removeRequestParcel(index: number) {
+    this.requestParcelsArray.removeAt(index);
   }
 
-  countDelivered(parcels: Parcel[]): number {
-      return parcels.filter(p => p.delivered).length;
+  openRequestModal(trip: Trip) {
+    this.selectedTripForRequest = trip;
+    this.requestForm.reset({ type: 'PARCEL', description: '' });
+    this.requestParcelsArray.clear();
+    this.addRequestParcel();
   }
 
-  async toggleParcelDelivery(trip: Trip, parcelToToggle: Parcel) {
-      if (!trip.uid) return;
+  closeRequestModal() {
+    this.selectedTripForRequest = null;
+  }
 
-      // A. Est-ce un colis principal ?
-      const mainIndex = trip.parcels?.findIndex(p => 
-          p.description === parcelToToggle.description && p.recipientName === parcelToToggle.recipientName
-      );
+  async submitRequest() {
+    if (this.requestForm.valid && this.selectedTripForRequest) {
+      const formValue = this.requestForm.value;
+      
+      const requestData: any = {
+        type: formValue.type,
+        status: 'PENDING',
+        requesterName: 'Admin', 
+        requesterEmail: 'admin@gmail.com', 
+        createdAt: new Date().toISOString()
+      };
 
-      if (mainIndex !== undefined && mainIndex !== -1 && trip.parcels) {
-          trip.parcels[mainIndex].delivered = !trip.parcels[mainIndex].delivered;
-          await this.tripService.updateParcels(trip.uid, trip.parcels);
-      } 
-      // B. Sinon, c'est un colis "Extra Request"
-      else if (trip.extraRequests) {
-          let requestModified = false;
-          
-          // On parcourt les demandes pour trouver le colis
-          for (let i = 0; i < trip.extraRequests.length; i++) {
-              const req = trip.extraRequests[i];
-              if (req.type === 'PARCEL' && req.parcels) {
-                  const pIndex = req.parcels.findIndex(p => 
-                      p.description === parcelToToggle.description && p.recipientName === parcelToToggle.recipientName
-                  );
-                  
-                  if (pIndex !== -1) {
-                      req.parcels[pIndex].delivered = !req.parcels[pIndex].delivered;
-                      requestModified = true;
-                      // Note : Ici on modifie l'objet local 'trip'. 
-                      // Firestore ne permet pas d'updater un élément précis d'un tableau d'objets imbriqués facilement.
-                      // La méthode simple est de réécrire tout le champ extraRequests.
-                  }
-              }
-          }
-
-          if (requestModified) {
-              await updateDoc(doc(this.firestore, 'trips', trip.uid), { extraRequests: trip.extraRequests });
-          }
+      if (formValue.type === 'PARCEL') {
+         const parcels = formValue.parcels ?? [];
+         requestData.parcels = parcels; 
+         requestData.description = `${parcels.length} colis ajoutés`;
+      } else {
+         requestData.description = formValue.description;
       }
 
-      // Mise à jour locale pour l'UI immédiate
-      this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); 
+      await this.tripService.addRequest(this.selectedTripForRequest.uid!, requestData);
+      this.closeRequestModal();
+      alert('Demande envoyée au chauffeur !');
+    }
   }
 
-  logout() { this.authService.logout().subscribe(); }
+  private enrichedTrips$ = combineLatest([this.tripService.getTrips(), this.userService.getAllUsers(), this.carService.getCars()]).pipe(
+    map(([trips, users, cars]) => {
+       return trips.map((trip: any) => {
+          let driver = users.find(u => u.uid === trip.driverId);
+          if (!driver && trip.carId) {
+             const car = cars.find(c => c.uid === trip.carId);
+             if (car && car.assignedDriverId) driver = users.find(u => u.uid === car.assignedDriverId);
+          }
+          return { ...trip, driverEmail: driver ? driver.email : null, driverPhone: driver ? driver.phoneNumber : null, driverProfile: driver };
+       });
+    })
+  );
+  private enrichedRawTrips = toSignal(this.enrichedTrips$, { initialValue: [] });
+  filteredTrips = computed(() => {
+    const trips = this.enrichedRawTrips();
+    const filters = this.filterValues();
+    const myCompany = this.adminCompany();
+    const isAdmin = myCompany === 'System' || !myCompany; 
+    return trips.filter((t: any) => {
+       if (!isAdmin && t.company !== myCompany) return false;
+       return (!filters?.company || t.company === filters.company) && (!filters?.inProgressOnly || t.status === 'IN_PROGRESS');
+    });
+  });
+
+  toggleForm() { this.showForm = !this.showForm; }
+  async createTrip() { 
+    if (this.tripForm.valid) { 
+      const company = this.adminCompany() === 'System' ? 'Tunisia Express' : this.adminCompany(); 
+      await this.tripService.createTrip({ ...this.tripForm.value, driverId: 'PENDING', status: 'PENDING', company: company || 'Unknown', extraRequests: [] } as any);
+      this.tripForm.reset(); this.parcelsArray.clear(); this.showForm = false; 
+    } 
+  }
+  async deleteTrip(trip: Trip) { if (confirm('Supprimer ?')) await this.tripService.deleteTrip(trip.uid!); }
+  openChat(user: UserProfile) { this.chatService.startChatWith(user); this.router.navigate(['/admin/chat']); }
+
+  // FIX: URL CORRECTE POUR L'ITINÉRAIRE
+  handleTrackClick(trip: Trip) { 
+     const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`;
+     window.open(url, '_blank'); 
+  }
 }
 EOF
 
-echo "✅ Correctif appliqué : Le chauffeur voit maintenant TOUS les colis (Principaux + Demandes Supplémentaires)."
+echo "✅ URL Google Maps corrigée avec succès !"

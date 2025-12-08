@@ -7,6 +7,7 @@ import { Firestore, collection, getDocs, writeBatch, doc } from '@angular/fire/f
 export class MockDataService {
   private firestore = inject(Firestore);
 
+  // VILLES DE TUNISIE POUR LES TRAJETS
   private cities = [
     { name: 'Tunis', lat: 36.8065, lng: 10.1815 },
     { name: 'Sfax', lat: 34.7406, lng: 10.7603 },
@@ -96,7 +97,6 @@ export class MockDataService {
              carId: 'car_' + driver.uid,
              company: 'Tunisia Express',
              currentLocation: { lat: start.lat, lng: start.lng, city: start.name, lastUpdate: new Date().toISOString() },
-             // NOUVELLE STRUCTURE COLIS
              parcels: [
                 { 
                   description: 'PC Portable', 
@@ -121,21 +121,43 @@ export class MockDataService {
     });
 
     await batch.commit();
-    alert('Données générées avec succès (Nouvelle structure Colis).');
+    alert('Données générées : Chauffeurs, Admins, Société et Trajets créés (Super Admin préservé).');
   }
 
   private async clearFirestore() {
+    // Liste des collections à nettoyer
     const collections = ['users', 'companies', 'cars', 'trips', 'chats'];
+
     for (const colName of collections) {
       const q = collection(this.firestore, colName);
       const snapshot = await getDocs(q);
+      
+      // On traite par lots (batch) pour la rapidité
       const batch = writeBatch(this.firestore);
+      let deleteCount = 0;
+
       snapshot.docs.forEach((d) => {
          const data = d.data();
-         if (colName === 'users' && data['email'] === 'admin@gmail.com') return;
+         
+         // PROTECTION CRITIQUE DU SUPER ADMIN
+         if (colName === 'users') {
+            const email = data['email'] ? data['email'].toLowerCase() : '';
+            // Si c'est l'admin système, on ne le touche pas
+            if (email === 'admin@gmail.com') {
+                console.log('🛡️ COMPTE SUPER ADMIN PRÉSERVÉ : admin@gmail.com');
+                return; // On passe au suivant sans supprimer
+            }
+         }
+
+         // Pour tous les autres cas, on ajoute à la suppression
          batch.delete(d.ref);
+         deleteCount++;
       });
-      await batch.commit();
+
+      if (deleteCount > 0) {
+          await batch.commit();
+          console.log(`Supprimé ${deleteCount} documents dans ${colName}`);
+      }
     }
   }
 }
