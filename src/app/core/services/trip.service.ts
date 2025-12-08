@@ -3,10 +3,12 @@ import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDo
 import { Observable } from 'rxjs';
 
 export interface Parcel {
-  description: string;
-  weight: number;
-  recipient: string;
-  delivered?: boolean; // NOUVEAU : Statut de livraison
+  description: string;      // Désignation
+  recipientName: string;    // Nom destinataire
+  recipientPhone: string;   // NOUVEAU : Téléphone
+  recipientAddress: string; // NOUVEAU : Adresse
+  weight: number;           // Poids
+  delivered?: boolean;
 }
 
 export interface GeoLocation {
@@ -31,7 +33,6 @@ export interface Trip {
   uid?: string;
   departure: string;
   destination: string;
-  
   departureLat?: number;
   departureLng?: number;
   destinationLat?: number;
@@ -75,7 +76,6 @@ export class TripService {
     });
   }
 
-  // NOUVEAU : Mettre à jour la liste des colis (pour cocher/décocher livré)
   updateParcels(tripId: string, parcels: Parcel[]) {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { parcels });

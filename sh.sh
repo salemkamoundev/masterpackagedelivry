@@ -1,283 +1,225 @@
 #!/bin/bash
 
-TARGET="src/app/features/admin/cars/car-manager.component.ts"
+TARGET="src/app/features/driver/dashboard/driver-dashboard.component.ts"
 
-echo "Application du Bypass Super Admin (Sans Firestore) dans $TARGET..."
+echo "🛠️ Correction des erreurs TypeScript (Null Safety) dans $TARGET..."
 
 cat << 'EOF' > "$TARGET"
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { CarService, Car } from '../../../core/services/car.service';
-import { UserService } from '../../../core/services/user.service';
-import { AuthService, UserProfile } from '../../../core/auth/auth.service';
-import { CompanyService } from '../../../core/services/company.service';
-import { Observable, combineLatest, of } from 'rxjs';
-import { switchMap, map, shareReplay, startWith } from 'rxjs/operators';
+import { AuthService } from '../../../core/auth/auth.service';
+import { TripService, Trip } from '../../../core/services/trip.service';
+import { CarService } from '../../../core/services/car.service';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { combineLatest, map } from 'rxjs';
+import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
 
 @Component({
-  selector: 'app-car-manager',
+  selector: 'app-driver-dashboard',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule],
   template: `
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-3 bg-indigo-50 p-4 rounded-lg border border-indigo-200 mb-4">
-        <div class="flex items-center gap-2">
-           <span class="text-2xl">🏢</span> 
-           <div>
-             <p class="text-sm font-semibold text-indigo-800">Mode de Gestion</p>
-             <p class="font-bold text-indigo-900">
-               @if (isSuperAdmin()) {
-                 ⚡ SUPER ADMIN (Compte Système)
-               } @else if (adminCompany()) {
-                 {{ adminCompany() }}
-               } @else {
-                 <span class="italic opacity-50">Chargement...</span>
-               }
-             </p>
+    <div class="min-h-screen bg-gray-50 flex flex-col">
+      <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
+        <div class="max-w-7xl mx-auto py-4 px-4 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+             <span class="text-2xl">🧢</span>
+             <h1 class="text-xl font-bold text-gray-900">Espace Chauffeur</h1>
+          </div>
+          <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-1 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
+        </div>
+      </header>
+  
+      <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 relative">
+        <div *ngIf="missions().length > 0; else noMissions">
+           <h2 class="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <span>📋</span> Vos Missions Assignées ({{ missions().length }})
+           </h2>
+           
+           <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              @for (trip of missions(); track trip.uid) {
+                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
+                      [ngClass]="{
+                        'border-indigo-500': trip.status === 'PENDING',
+                        'border-blue-500': trip.status === 'IN_PROGRESS',
+                        'border-green-500': trip.status === 'COMPLETED'
+                      }">
+                    
+                    <div class="p-5">
+                        <div class="flex justify-between items-start mb-3">
+                           <div>
+                              <h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3>
+                              <p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p>
+                           </div>
+                           <span class="px-2 py-1 text-xs font-bold rounded uppercase tracking-wide"
+                                [ngClass]="{
+                                  'bg-indigo-100 text-indigo-700': trip.status === 'PENDING',
+                                  'bg-blue-100 text-blue-700': trip.status === 'IN_PROGRESS',
+                                  'bg-green-100 text-green-700': trip.status === 'COMPLETED'
+                                }">
+                              {{ trip.status === 'IN_PROGRESS' ? 'En Cours' : trip.status }}
+                           </span>
+                        </div>
+                        
+                        <div class="space-y-2 text-sm text-gray-600 mb-4">
+                           <div class="flex items-center gap-2">
+                              <span>📅</span> {{ trip.date | date:'dd/MM HH:mm' }}
+                           </div>
+                           <div class="flex items-center gap-2">
+                              <span>📦</span> {{ trip.parcels?.length ?? 0 }} Colis à livrer
+                           </div>
+                        </div>
+
+                        <button (click)="viewDetails(trip)" class="w-full bg-gray-900 text-white py-2.5 rounded-lg font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+                           <span>👁️</span> Voir Détails & Colis
+                        </button>
+                    </div>
+                 </div>
+              }
            </div>
         </div>
-      </div>
-
-      <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 h-fit">
-        <h3 class="text-lg font-bold text-gray-800 mb-4">Ajouter un Véhicule</h3>
-        <form [formGroup]="carForm" (ngSubmit)="addCar()" class="space-y-4">
-          
-          @if (isSuperAdmin()) {
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Société <span class="text-red-500">*</span></label>
-              <select formControlName="company" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 bg-yellow-50">
-                <option value="" disabled>Choisir une société</option>
-                @for (company of companies(); track company.uid) {
-                  <option [value]="company.name">{{ company.name }}</option>
-                }
-              </select>
-            </div>
-          }
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Modèle</label>
-            <input formControlName="model" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" 
-              placeholder="Ex: Renault Kangoo">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Plaque</label>
-            <input formControlName="plate" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="123 TN 4567">
-          </div>
-          
-          <button type="submit" [disabled]="carForm.invalid || (!isSuperAdmin() && !adminCompany())" 
-            class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-             @if (isSuperAdmin()) {
-                Ajouter Véhicule
-             } @else if (adminCompany()) {
-                Ajouter à {{ adminCompany() }}
-             } @else {
-                Chargement...
-             }
-          </button>
-        </form>
-      </div>
-
-      <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-           <h3 class="text-lg font-bold text-gray-800">
-             Flotte {{ isSuperAdmin() ? 'Globale' : adminCompany() }}
-           </h3>
-           <span class="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
-             {{ (carsFiltered$ | async)?.length || 0 }} véhicules
-           </span>
-        </div>
         
-        <div *ngIf="(carsFiltered$ | async)?.length === 0" class="p-12 text-center flex flex-col items-center justify-center text-gray-500">
-           <span class="text-4xl mb-2">🚚</span>
-           <p>Aucun véhicule trouvé.</p>
-        </div>
+        <ng-template #noMissions>
+            <div class="flex flex-col items-center justify-center py-20 text-gray-400">
+                <span class="text-6xl mb-4">🚚</span>
+                <p class="text-lg font-medium">Aucune mission pour le moment.</p>
+                <p class="text-sm">Profitez de votre pause !</p>
+            </div>
+        </ng-template>
 
-        <div class="overflow-x-auto" *ngIf="(carsFiltered$ | async)?.length ?? 0 > 0">
-           <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Véhicule</th>
-                  @if (isSuperAdmin()) {
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Société</th>
-                  }
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chauffeur</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                @for (car of carsFiltered$ | async; track car.uid) {
-                  <tr class="hover:bg-gray-50 transition-colors">
-                     <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm font-bold text-gray-900">{{ car.model }}</div>
-                        <div class="text-xs text-gray-500 font-mono">{{ car.plate }}</div>
-                     </td>
-                     
-                     @if (isSuperAdmin()) {
-                       <td class="px-6 py-4 whitespace-nowrap">
-                          <span class="px-2 py-1 text-xs font-bold bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">
-                            {{ car.company }}
-                          </span>
-                       </td>
-                     }
+        @if (selectedTrip(); as trip) {
+            <div class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up my-auto">
+                    
+                    <div class="bg-gray-900 text-white p-6 flex justify-between items-start">
+                        <div>
+                        <h3 class="font-bold text-xl">{{ trip.destination }}</h3>
+                        <p class="text-gray-300 text-sm mt-1">Départ: {{ trip.departure }}</p>
+                        </div>
+                        <button (click)="closeDetails()" class="text-gray-400 hover:text-white text-2xl font-bold">✕</button>
+                    </div>
 
-                     <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 inline-flex text-xs leading-5 font-bold rounded-full"
-                           [ngClass]="{'bg-green-100 text-green-800': car.status === 'AVAILABLE', 'bg-red-100 text-red-800': car.status === 'BUSY', 'bg-yellow-100 text-yellow-800': car.status === 'MAINTENANCE'}">
-                           {{ car.status === 'AVAILABLE' ? 'DISPONIBLE' : (car.status === 'BUSY' ? 'EN MISSION' : 'MAINTENANCE') }}
-                        </span>
-                     </td>
-                     <td class="px-6 py-4 whitespace-nowrap">
-                        <select #driverSelect (change)="assignDriver(car, driverSelect.value)" 
-                                class="text-sm border-gray-300 rounded-md border p-1.5 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm cursor-pointer w-40">
-                           <option value="" [selected]="!car.assignedDriverId">-- Non assigné --</option>
-                           @for (driver of getDriversForCar(car, (drivers$ | async)); track driver.uid) {
-                              <option [value]="driver.uid" [selected]="car.assignedDriverId === driver.uid">
-                                 {{ driver.email }}
-                              </option>
-                           }
-                        </select>
-                     </td>
-                     <td class="px-6 py-4 whitespace-nowrap text-right">
-                       <button (click)="deleteCar(car)" class="text-red-600 hover:text-red-900 text-xs font-bold border border-red-200 bg-red-50 px-2 py-1 rounded">Supprimer</button>
-                     </td>
-                   </tr>
-                 }
-              </tbody>
-           </table>
-        </div>
-      </div>
+                    <div class="p-6 max-h-[70vh] overflow-y-auto">
+                        
+                        <div class="flex gap-3 mb-8">
+                        <button *ngIf="trip.status === 'PENDING'" (click)="updateStatus('IN_PROGRESS')" class="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 flex items-center justify-center gap-2">
+                            🚀 Démarrer la Mission
+                        </button>
+                        <button *ngIf="trip.status === 'IN_PROGRESS'" (click)="updateStatus('COMPLETED')" class="flex-1 bg-gray-800 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-gray-900 flex items-center justify-center gap-2">
+                            🏁 Terminer la Mission
+                        </button>
+                        <a [href]="getMapUrl(trip)" target="_blank" class="flex-1 bg-blue-100 text-blue-700 py-3 rounded-xl font-bold hover:bg-blue-200 flex items-center justify-center gap-2 text-center">
+                            📍 GPS
+                        </a>
+                        </div>
+
+                        <h4 class="font-bold text-gray-800 mb-4 border-b pb-2 flex justify-between items-center">
+                            <span>📦 Colis à livrer</span>
+                            <span class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-600">{{ countDelivered(trip) }} / {{ trip.parcels?.length ?? 0 }} livrés</span>
+                        </h4>
+
+                        <div class="space-y-4">
+                            @for (parcel of trip.parcels; track $index) {
+                                <div class="border rounded-xl p-4 transition-colors" 
+                                    [ngClass]="parcel.delivered ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'">
+                                    
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="font-bold text-lg text-gray-800">{{ parcel.description }}</span>
+                                                <span *ngIf="parcel.weight" class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{{ parcel.weight }}kg</span>
+                                            </div>
+                                            
+                                            <div class="text-sm space-y-1 mt-2">
+                                                <p class="font-bold text-indigo-900">👤 {{ parcel.recipientName }}</p>
+                                                <p class="text-gray-600 flex items-start gap-1">
+                                                    <span>📍</span> 
+                                                    <span>{{ parcel.recipientAddress || 'Adresse non spécifiée' }}</span>
+                                                </p>
+                                                <p class="text-gray-600 flex items-center gap-1" *ngIf="parcel.recipientPhone">
+                                                    <span>📞</span> 
+                                                    <a [href]="'tel:' + parcel.recipientPhone" class="text-blue-600 underline font-bold">{{ parcel.recipientPhone }}</a>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div class="ml-4 flex flex-col items-center gap-1">
+                                            <button (click)="toggleParcelDelivery($index)" 
+                                                    class="w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all border-2"
+                                                    [ngClass]="parcel.delivered ? 'bg-green-500 text-white border-green-600 scale-110' : 'bg-white text-gray-300 border-gray-200 hover:border-gray-400'">
+                                                {{ parcel.delivered ? '✓' : '' }}
+                                            </button>
+                                            <span class="text-[10px] font-bold uppercase" [class.text-green-600]="parcel.delivered" [class.text-gray-400]="!parcel.delivered">
+                                                {{ parcel.delivered ? 'Livré' : 'À faire' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            @if (!trip.parcels || trip.parcels.length === 0) {
+                                <div class="text-center py-6 text-gray-400 italic">Aucun colis listé pour ce trajet.</div>
+                            }
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        }
+      </main>
     </div>
   `
 })
-export class CarManagerComponent {
-  private carService = inject(CarService);
-  private userService = inject(UserService);
+export class DriverDashboardComponent {
   private authService = inject(AuthService);
-  private companyService = inject(CompanyService);
-  private fb = inject(FormBuilder);
-
-  // 1. MODIFICATION CRITIQUE : Forgeage du profil Super Admin si pas de doc Firestore
-  adminProfile$ = this.authService.user$.pipe(
-    switchMap(user => {
-        if (!user) return of(null);
-        
-        // DETECTION PAR EMAIL (Bypass Firestore)
-        if (user.email === 'admin@gmail.com') {
-           const superAdminProfile: UserProfile = {
-               uid: user.uid,
-               email: user.email,
-               role: 'SUPER_ADMIN',
-               company: 'System', // Société système
-               isActive: true,
-               phoneNumber: '00000000',
-               createdAt: new Date()
-           };
-           return of(superAdminProfile);
-        }
-
-        // Sinon, on cherche dans Firestore normalement
-        return this.authService.getUserProfile(user.uid);
-    }),
-    shareReplay(1)
-  );
+  private tripService = inject(TripService);
+  private carService = inject(CarService);
+  private firestore = inject(Firestore);
   
-  companies = this.companyService.activeCompanies;
-
-  isSuperAdmin = toSignal(this.adminProfile$.pipe(
-    map(p => p?.role === 'SUPER_ADMIN' || p?.email === 'admin@gmail.com')
-  ), { initialValue: false });
-
-  adminCompany = toSignal(this.adminProfile$.pipe(map(p => p?.company || null)));
-
-  // Filtre Véhicules
-  carsFiltered$ = combineLatest([
-    this.carService.getCars(), 
-    this.adminProfile$.pipe(startWith(null))
-  ]).pipe(
-    map(([cars, profile]) => {
-      // Si Super Admin, on retourne tout
-      if (profile?.role === 'SUPER_ADMIN') {
-        return cars;
-      }
-      if (!profile?.company) return [];
-      return cars.filter(car => car.company === profile.company);
-    })
-  );
-
-  // Filtre Chauffeurs
-  drivers$ = combineLatest([
-    this.userService.getAllUsers(), 
-    this.adminProfile$.pipe(startWith(null))
-  ]).pipe(
-    map(([users, profile]) => {
-      // Si Super Admin, tous les chauffeurs actifs
-      if (profile?.role === 'SUPER_ADMIN') {
-        return users.filter(u => u.role === 'DRIVER' && u.isActive);
-      }
-      if (!profile?.company) return [];
-      return users.filter(u => u.role === 'DRIVER' && u.isActive && u.company === profile.company);
-    })
-  );
-
-  carForm = this.fb.group({
-    model: ['', Validators.required],
-    plate: ['', Validators.required],
-    company: ['']
-  });
-
-  getDriversForCar(car: Car, allDrivers: any[] | null): any[] {
-    if (!allDrivers) return [];
-    if (this.isSuperAdmin()) {
-       return allDrivers.filter(d => d.company === car.company);
-    }
-    return allDrivers;
-  }
-
-  addCar() {
-    let targetCompany = this.adminCompany();
-
-    if (this.isSuperAdmin()) {
-       const formCompany = this.carForm.value.company;
-       if (!formCompany) {
-         alert("En tant que Super Admin, vous devez sélectionner une société.");
-         return;
-       }
-       targetCompany = formCompany;
-    }
-
-    if (!targetCompany || this.carForm.invalid) return;
-
-    const newCar: Car = {
-      model: this.carForm.value.model!,
-      plate: this.carForm.value.plate!,
-      status: 'AVAILABLE',
-      assignedDriverId: null,
-      company: targetCompany
-    };
-
-    this.carService.addCar(newCar).then(() => {
-      this.carForm.reset({ company: '' });
-      if (!this.isSuperAdmin()) alert('Véhicule ajouté !');
-    }).catch(err => alert('Erreur: ' + err));
-  }
-
-  assignDriver(car: Car, driverId: string) {
-    if (!this.isSuperAdmin() && car.company !== this.adminCompany()) {
-       alert("Action non autorisée sur ce véhicule.");
-       return;
-    }
-    this.carService.assignDriver(car.uid!, driverId || null);
-  }
+  private user$ = this.authService.user$;
+  private cars$ = this.carService.getCars();
+  private allTrips$ = this.tripService.getTrips();
   
-  deleteCar(car: Car) {
-     if(confirm('Supprimer ce véhicule ?')) {
-       alert("Fonctionnalité de suppression à implémenter dans CarService.");
+  selectedTrip = signal<Trip | null>(null);
+  
+  missions = toSignal(combineLatest([this.user$, this.cars$, this.allTrips$]).pipe(map(([user, cars, trips]) => {
+        if (!user) return [];
+        const myCar = cars.find(c => c.assignedDriverId === user.uid);
+        if (!myCar) return [];
+        return trips.filter(t => t.carId === myCar.uid);
+  })), { initialValue: [] });
+
+  viewDetails(trip: Trip) { this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); }
+  
+  closeDetails() { this.selectedTrip.set(null); }
+  
+  async updateStatus(status: 'IN_PROGRESS' | 'COMPLETED') {
+     const currentTrip = this.selectedTrip();
+     if(currentTrip && currentTrip.uid) {
+         await updateDoc(doc(this.firestore, 'trips', currentTrip.uid), { status });
+         this.closeDetails();
      }
   }
+
+  async toggleParcelDelivery(index: number) {
+      const trip = this.selectedTrip();
+      if (!trip || !trip.parcels || !trip.uid) return;
+
+      trip.parcels[index].delivered = !trip.parcels[index].delivered;
+      
+      await this.tripService.updateParcels(trip.uid, trip.parcels);
+      this.selectedTrip.set({...trip});
+  }
+
+  getMapUrl(trip: Trip): string {
+      return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`;
+  }
+
+  countDelivered(trip: Trip): number {
+      return trip.parcels?.filter(p => p.delivered).length || 0;
+  }
+
+  logout() { this.authService.logout().subscribe(); }
 }
 EOF
 
-echo "✅ Admin Bypass activé : admin@gmail.com est maintenant reconnu comme SUPER_ADMIN sans données Firestore."
+echo "✅ Fichier DriverDashboardComponent corrigé et sécurisé !"

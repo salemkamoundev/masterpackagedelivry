@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, getDocs, writeBatch, doc } from '@angular/fire/firestore';
-import { Auth } from '@angular/fire/auth';
 
 @Injectable({
   providedIn: 'root'
@@ -8,7 +7,6 @@ import { Auth } from '@angular/fire/auth';
 export class MockDataService {
   private firestore = inject(Firestore);
 
-  // VILLES DE TUNISIE POUR LES TRAJETS
   private cities = [
     { name: 'Tunis', lat: 36.8065, lng: 10.1815 },
     { name: 'Sfax', lat: 34.7406, lng: 10.7603 },
@@ -24,7 +22,7 @@ export class MockDataService {
     console.log('Base nettoyée. Génération...');
 
     const batch = writeBatch(this.firestore);
-    
+
     // 1. CRÉATION SOCIÉTÉ
     const companyId = 'comp_tunisia_express';
     batch.set(doc(this.firestore, 'companies', companyId), {
@@ -35,8 +33,8 @@ export class MockDataService {
     });
 
     // 2. CRÉATION DES UTILISATEURS
-    const drivers: any[] = []; // CORRECTION : Typage explicite
-    const admins: any[] = [];  // CORRECTION : Typage explicite
+    const drivers: any[] = [];
+    const admins: any[] = [];
 
     // -> 3 Chauffeurs
     for (let i = 1; i <= 3; i++) {
@@ -98,19 +96,32 @@ export class MockDataService {
              carId: 'car_' + driver.uid,
              company: 'Tunisia Express',
              currentLocation: { lat: start.lat, lng: start.lng, city: start.name, lastUpdate: new Date().toISOString() },
+             // NOUVELLE STRUCTURE COLIS
              parcels: [
-                { description: 'Colis A', weight: 10, recipient: 'Client X', delivered: false },
-                { description: 'Documents', weight: 1, recipient: 'Banque', delivered: true }
+                { 
+                  description: 'PC Portable', 
+                  weight: 2.5, 
+                  recipientName: 'Client Alpha', 
+                  recipientPhone: '22 555 111',
+                  recipientAddress: '12 Rue de la Liberté, Tunis',
+                  delivered: false 
+                },
+                { 
+                  description: 'Dossier Administratif', 
+                  weight: 0.5, 
+                  recipientName: 'Banque STB', 
+                  recipientPhone: '71 111 222',
+                  recipientAddress: 'Av. Habib Bourguiba, Sfax',
+                  delivered: true 
+                }
              ],
-             extraRequests: [
-                { requesterEmail: creator, type: 'PARCEL', description: 'Urgent', status: 'PENDING', createdAt: new Date().toISOString() }
-             ]
+             extraRequests: []
           });
        }
     });
 
     await batch.commit();
-    alert('Données générées : 3 Chauffeurs, 2 Admins, 1 Société, 6 Trajets.');
+    alert('Données générées avec succès (Nouvelle structure Colis).');
   }
 
   private async clearFirestore() {

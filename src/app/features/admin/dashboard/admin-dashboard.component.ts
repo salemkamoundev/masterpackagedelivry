@@ -92,8 +92,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
         </main>
       </div>
 
-      <app-chat></app-chat>
-
+      
     </div>
   `
 })
