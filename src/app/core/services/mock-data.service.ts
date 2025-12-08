@@ -7,7 +7,6 @@ import { Firestore, collection, getDocs, writeBatch, doc } from '@angular/fire/f
 export class MockDataService {
   private firestore = inject(Firestore);
 
-  // VILLES DE TUNISIE POUR LES TRAJETS
   private cities = [
     { name: 'Tunis', lat: 36.8065, lng: 10.1815 },
     { name: 'Sfax', lat: 34.7406, lng: 10.7603 },
@@ -24,7 +23,7 @@ export class MockDataService {
 
     const batch = writeBatch(this.firestore);
 
-    // 1. CRÉATION SOCIÉTÉ
+    // 1. SOCIÉTÉ
     const companyId = 'comp_tunisia_express';
     batch.set(doc(this.firestore, 'companies', companyId), {
       name: 'Tunisia Express',
@@ -33,10 +32,9 @@ export class MockDataService {
       createdAt: new Date().toISOString()
     });
 
-    // 2. CRÉATION DES UTILISATEURS
+    // 2. UTILISATEURS
     const drivers: any[] = [];
-    const admins: any[] = [];
-
+    
     // -> 3 Chauffeurs
     for (let i = 1; i <= 3; i++) {
        const uid = 'driver_' + Date.now() + '_' + i;
@@ -62,7 +60,7 @@ export class MockDataService {
        });
     }
 
-    // -> 2 Administrateurs
+    // -> 2 Admins
     for (let i = 1; i <= 2; i++) {
        const uid = 'admin_' + Date.now() + '_' + i;
        const admin = {
@@ -75,10 +73,9 @@ export class MockDataService {
           createdAt: new Date()
        };
        batch.set(doc(this.firestore, 'users', uid), admin);
-       admins.push(admin);
     }
 
-    // 3. CRÉATION DES TRAJETS
+    // 3. TRAJETS MIXTES (Colis + Passagers)
     drivers.forEach((driver, index) => {
        for(let j=0; j<2; j++) {
           const start = this.cities[Math.floor(Math.random() * this.cities.length)];
@@ -86,8 +83,7 @@ export class MockDataService {
           while(start.name === end.name) end = this.cities[Math.floor(Math.random() * this.cities.length)];
 
           const tripId = 'trip_' + driver.uid + '_' + j;
-          const creator = (Math.random() > 0.5) ? admins[0].email : 'admin@gmail.com'; 
-
+          
           batch.set(doc(this.firestore, 'trips', tripId), {
              departure: start.name,
              destination: end.name,
@@ -97,67 +93,51 @@ export class MockDataService {
              carId: 'car_' + driver.uid,
              company: 'Tunisia Express',
              currentLocation: { lat: start.lat, lng: start.lng, city: start.name, lastUpdate: new Date().toISOString() },
+             
+             // COLIS
              parcels: [
                 { 
                   description: 'PC Portable', 
                   weight: 2.5, 
                   recipientName: 'Client Alpha', 
                   recipientPhone: '22 555 111',
-                  recipientAddress: '12 Rue de la Liberté, Tunis',
+                  recipientAddress: '12 Rue de la Liberté',
                   delivered: false 
-                },
-                { 
-                  description: 'Dossier Administratif', 
-                  weight: 0.5, 
-                  recipientName: 'Banque STB', 
-                  recipientPhone: '71 111 222',
-                  recipientAddress: 'Av. Habib Bourguiba, Sfax',
-                  delivered: true 
                 }
              ],
+
+             // PASSAGERS (Nouveau)
+             passengers: [
+                {
+                   name: 'Ahmed Ben Salah',
+                   phone: '98 123 456',
+                   pickupLocation: start.name + ' Centre',
+                   dropoffLocation: end.name + ' Gare',
+                   isDroppedOff: false
+                }
+             ],
+
              extraRequests: []
           });
        }
     });
 
     await batch.commit();
-    alert('Données générées : Chauffeurs, Admins, Société et Trajets créés (Super Admin préservé).');
+    alert('Données générées : Trajets mixtes (Colis + Passagers) créés.');
   }
 
   private async clearFirestore() {
-    // Liste des collections à nettoyer
     const collections = ['users', 'companies', 'cars', 'trips', 'chats'];
-
     for (const colName of collections) {
       const q = collection(this.firestore, colName);
       const snapshot = await getDocs(q);
-      
-      // On traite par lots (batch) pour la rapidité
       const batch = writeBatch(this.firestore);
-      let deleteCount = 0;
-
       snapshot.docs.forEach((d) => {
          const data = d.data();
-         
-         // PROTECTION CRITIQUE DU SUPER ADMIN
-         if (colName === 'users') {
-            const email = data['email'] ? data['email'].toLowerCase() : '';
-            // Si c'est l'admin système, on ne le touche pas
-            if (email === 'admin@gmail.com') {
-                console.log('🛡️ COMPTE SUPER ADMIN PRÉSERVÉ : admin@gmail.com');
-                return; // On passe au suivant sans supprimer
-            }
-         }
-
-         // Pour tous les autres cas, on ajoute à la suppression
+         if (colName === 'users' && data['email'] === 'admin@gmail.com') return;
          batch.delete(d.ref);
-         deleteCount++;
       });
-
-      if (deleteCount > 0) {
-          await batch.commit();
-          console.log(`Supprimé ${deleteCount} documents dans ${colName}`);
-      }
+      await batch.commit();
     }
   }
 }

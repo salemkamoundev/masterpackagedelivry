@@ -2,12 +2,20 @@ import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc, arrayUnion } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
+export interface Passenger {
+  name: string;
+  phone: string;
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  isDroppedOff?: boolean; // Statut de la course (terminée ou non)
+}
+
 export interface Parcel {
-  description: string;      // Désignation
-  recipientName: string;    // Nom destinataire
-  recipientPhone: string;   // NOUVEAU : Téléphone
-  recipientAddress: string; // NOUVEAU : Adresse
-  weight: number;           // Poids
+  description: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientAddress: string;
+  weight: number;
   delivered?: boolean;
 }
 
@@ -22,9 +30,9 @@ export interface TripRequest {
   type: 'PARCEL' | 'PASSENGER';
   description?: string;
   parcels?: Parcel[];
+  passengers?: Passenger[]; // Ajout support demande passager
   requesterName: string;
   requesterEmail?: string;
-  requesterCompany?: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
   createdAt: string;
 }
@@ -44,7 +52,10 @@ export interface Trip {
   carId: string;
   company: string;
   currentLocation?: GeoLocation;
-  parcels: Parcel[];
+  
+  parcels: Parcel[];      // Liste des colis
+  passengers: Passenger[]; // NOUVEAU : Liste des passagers
+  
   extraRequests?: TripRequest[];
 }
 
@@ -79,6 +90,12 @@ export class TripService {
   updateParcels(tripId: string, parcels: Parcel[]) {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { parcels });
+  }
+
+  // NOUVEAU : Mise à jour des passagers (pour cocher déposé/non déposé)
+  updatePassengers(tripId: string, passengers: Passenger[]) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, { passengers });
   }
 
   addRequest(tripId: string, request: TripRequest) {
