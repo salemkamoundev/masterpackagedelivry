@@ -1,139 +1,123 @@
 #!/bin/bash
-set -e
 
-echo "📦 Mise à jour du générateur de données (Ajout de multiples colis par trajet)..."
+echo "🚑 Correction de la navigation Chat dans la Liste Utilisateurs..."
 
-cat <<EOF > src/app/core/services/mock-data.service.ts
-import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, getDocs, writeBatch, doc, query } from '@angular/fire/firestore';
-import { Auth, createUserWithEmailAndPassword } from '@angular/fire/auth';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, signOut } from 'firebase/auth';
-import { environment } from '../../../environments/environment';
+cat <<EOF > src/app/features/admin/users/user-list.component.ts
+import { Component, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router'; // 1. Import du Router
+import { UserService } from '../../../core/services/user.service';
+import { AuthService, UserProfile } from '../../../core/auth/auth.service';
+import { ChatService } from '../../../core/services/chat.service';
+import { Observable } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
 
-const TUNISIAN_GOVERNORATES = [
-  { name: "Tunis", lat: 36.8065, lng: 10.1815 },
-  { name: "Sfax", lat: 34.7406, lng: 10.7603 },
-  { name: "Sousse", lat: 35.8256, lng: 10.6084 },
-  { name: "Gabès", lat: 33.8815, lng: 10.0982 },
-  { name: "Bizerte", lat: 37.2744, lng: 9.8739 },
-  { name: "Tozeur", lat: 33.9197, lng: 8.1335 },
-  { name: "Tataouine", lat: 32.9297, lng: 10.4518 },
-  { name: "Kairouan", lat: 35.6769, lng: 10.1010 },
-  { name: "Monastir", lat: 35.7643, lng: 10.8113 },
-  { name: "Nabeul", lat: 36.4540, lng: 10.7350 }
-];
-
-const ITEM_TYPES = ['Pièces Auto', 'Documents', 'Électronique', 'Vêtements', 'Médicaments', 'Outillage', 'Alimentaire Sec'];
-
-const COMPANIES = [{ name: 'Tunisia Express', email: 'contact@tn-express.tn' }, { name: 'Carthage Logistics', email: 'info@carthage.tn' }];
-
-@Injectable({
-  providedIn: 'root'
+@Component({
+  selector: 'app-user-list',
+  standalone: true,
+  imports: [CommonModule],
+  template: \`
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+      <div class="px-4 py-5 sm:px-6 flex justify-between items-center bg-indigo-50">
+        <div>
+           <h3 class="text-lg leading-6 font-bold text-gray-900">Gestion des Utilisateurs</h3>
+        </div>
+        <span class="bg-white text-indigo-600 py-1 px-3 rounded-full text-xs font-bold border border-indigo-200">
+          Total: {{ (users$ | async)?.length || 0 }}
+        </span>
+      </div>
+      
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Utilisateur</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rôle</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            @for (user of users$ | async; track user.uid) {
+              <tr class="hover:bg-gray-50 group">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <div class="flex items-center">
+                    <div class="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold mr-3">
+                      {{ user.email.charAt(0).toUpperCase() }}
+                    </div>
+                    <div>
+                      <div class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                         {{ user.email }}
+                         
+                         <button (click)="openChat(user)" 
+                                 class="opacity-50 group-hover:opacity-100 transition-opacity bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-1 rounded-full flex items-center justify-center h-6 w-6" 
+                                 title="Discuter">
+                            💬
+                         </button>
+                      </div>
+                      <div class="text-xs text-gray-500">{{ user.company }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold">
+                   <a *ngIf="user.phoneNumber" [href]="'tel:' + user.phoneNumber" class="text-indigo-700 hover:text-indigo-900 hover:underline">
+                     {{ user.phoneNumber }}
+                   </a>
+                   <span *ngIf="!user.phoneNumber" class="text-gray-400">N/A</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                    [ngClass]="{
+                      'bg-purple-100 text-purple-800': user.role === 'ADMIN' || user.role === 'SUPER_ADMIN',
+                      'bg-blue-100 text-blue-800': user.role === 'DRIVER',
+                      'bg-green-100 text-green-800': user.role === 'EMPLOYEE'
+                    }">
+                    {{ user.role }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                   <span *ngIf="user.isActive" class="text-green-600 text-xs font-bold">Actif</span>
+                   <span *ngIf="!user.isActive" class="text-red-600 text-xs font-bold">Inactif</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button *ngIf="!user.isActive" (click)="toggleStatus(user, true)" class="text-green-600 hover:text-green-900 mr-2">Valider</button>
+                  <button *ngIf="user.isActive" (click)="toggleStatus(user, false)" class="text-red-600 hover:text-red-900 mr-2">Désactiver</button>
+                  <button *ngIf="isSuperAdmin() && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN'" (click)="promoteToAdmin(user)" class="text-indigo-600 hover:text-indigo-900">★ Admin</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  \`
 })
-export class MockDataService {
-  private firestore = inject(Firestore);
+export class UserListComponent {
+  private userService = inject(UserService);
+  private authService = inject(AuthService);
+  private chatService = inject(ChatService);
+  private router = inject(Router); // 2. Injection du Router
 
-  async generateAll() {
-    await this.clearFirestore();
-    const secondaryApp = initializeApp(environment.firebase, 'SecondaryApp');
-    const secondaryAuth = getAuth(secondaryApp);
-    const batch = writeBatch(this.firestore);
+  users$: Observable<UserProfile[]> = this.userService.getAllUsers();
+  currentUser = toSignal(this.authService.user$);
 
-    try {
-      for (const companyData of COMPANIES) {
-        const companyId = 'comp_' + Math.random().toString(36).substr(2, 9);
-        const companyRef = doc(this.firestore, 'companies', companyId);
-        batch.set(companyRef, { uid: companyId, name: companyData.name, contactEmail: companyData.email, isActive: true, createdAt: new Date().toISOString() });
+  isSuperAdmin(): boolean { return this.currentUser()?.email === 'admin@gmail.com'; }
 
-        // 3 Chauffeurs par société
-        for (let i = 0; i < 3; i++) {
-           await this.createUser(secondaryAuth, batch, 'DRIVER', companyData.name);
-        }
-        // 3 Employés par société
-        for (let i = 0; i < 3; i++) {
-           await this.createUser(secondaryAuth, batch, 'EMPLOYEE', companyData.name);
-        }
-      }
-      await batch.commit();
-      alert('Données générées avec succès ! Chaque trajet contient maintenant plusieurs colis.');
-    } finally {
-      await deleteApp(secondaryApp);
-    }
+  toggleStatus(user: UserProfile, status: boolean) {
+    if(confirm(\`Modifier le statut de \${user.email} ?\`)) this.userService.updateUserStatus(user.uid, status);
   }
 
-  private async createUser(secondaryAuth: Auth, batch: any, role: string, company: string) {
-    const email = \`\${role.toLowerCase()}.\${Date.now()}\${Math.floor(Math.random()*100)}@test.com\`;
-    const password = 'Admin123';
-    const phone = \`+216 \${Math.floor(Math.random() * 89 + 10)} \${Math.floor(Math.random() * 899 + 100)} \${Math.floor(Math.random() * 899 + 100)}\`;
-
-    let uid = 'mock_' + Math.random().toString(36).substr(2, 9);
-    try {
-       const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-       uid = cred.user.uid;
-       await signOut(secondaryAuth);
-    } catch(e) { console.warn("Auth skip:", e); }
-    
-    const userRef = doc(this.firestore, 'users', uid);
-    batch.set(userRef, { uid, email, role, company, phoneNumber: phone, isActive: true, createdAt: new Date() });
-    
-    if(role === 'DRIVER') {
-       const carId = 'car_' + uid;
-       const carRef = doc(this.firestore, 'cars', carId);
-       batch.set(carRef, { uid: carId, model: 'Partner', plate: '123 TN ' + Math.floor(Math.random()*9999), status: 'BUSY', assignedDriverId: uid, company });
-       
-       const tripRef = doc(collection(this.firestore, 'trips'));
-       const start = TUNISIAN_GOVERNORATES[Math.floor(Math.random() * TUNISIAN_GOVERNORATES.length)];
-       let end = TUNISIAN_GOVERNORATES[Math.floor(Math.random() * TUNISIAN_GOVERNORATES.length)];
-       while(end === start) end = TUNISIAN_GOVERNORATES[Math.floor(Math.random() * TUNISIAN_GOVERNORATES.length)];
-
-       const currentLocation = { 
-           lat: (start.lat + end.lat)/2, 
-           lng: (start.lng + end.lng)/2, 
-           city: 'En route vers ' + end.name, 
-           lastUpdate: new Date().toISOString() 
-       };
-       
-       // GÉNÉRATION DES COLIS MULTIPLES
-       const numParcels = Math.floor(Math.random() * 4) + 3; // Entre 3 et 6 colis
-       const parcels = [];
-       for(let k=0; k < numParcels; k++) {
-          const type = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
-          parcels.push({
-             description: \`\${type} - Ref: \${Math.floor(Math.random()*1000)}\`,
-             weight: Math.floor(Math.random() * 20) + 1,
-             recipient: \`Client \${String.fromCharCode(65+k)}\`, // Client A, B, C...
-             delivered: false
-          });
-       }
-       
-       batch.set(tripRef, { 
-          departure: start.name, destination: end.name, 
-          departureLat: start.lat, departureLng: start.lng,
-          destinationLat: end.lat, destinationLng: end.lng,
-          date: new Date().toISOString(), 
-          status: 'IN_PROGRESS', driverId: uid, carId, company, currentLocation, 
-          parcels: parcels // Liste générée
-       });
-    }
+  promoteToAdmin(user: UserProfile) {
+    if(confirm(\`Promouvoir \${user.email} comme Admin ?\`)) this.userService.updateUserRole(user.uid, 'ADMIN');
   }
 
-  private async clearFirestore() {
-    const collections = ['users', 'companies', 'cars', 'trips'];
-    for (const colName of collections) {
-      const q = query(collection(this.firestore, colName));
-      const snapshot = await getDocs(q);
-      const batch = writeBatch(this.firestore);
-      snapshot.docs.forEach((d) => { 
-          const data = d.data();
-          if(colName !== 'users' || (data && data['email'] !== 'admin@gmail.com')) {
-              batch.delete(d.ref); 
-          }
-      });
-      await batch.commit();
-    }
+  // 3. CORRECTION : Ouverture ET Redirection
+  openChat(user: UserProfile) {
+    this.chatService.startChatWith(user); // Sélectionne l'utilisateur
+    this.router.navigate(['/admin/chat']); // Redirige vers la page de chat
   }
 }
 EOF
 
-echo "✅ Mock Data mis à jour : Génération de multiples colis par trajet activée."
+echo "✅ Le bouton Chat redirige maintenant vers la page de messagerie."

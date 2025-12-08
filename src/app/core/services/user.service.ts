@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Firestore, collection, collectionData, doc, updateDoc } from '@angular/fire/firestore';
+import { Firestore, collection, doc, updateDoc, onSnapshot } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { UserProfile } from '../auth/auth.service';
 
@@ -9,11 +9,29 @@ import { UserProfile } from '../auth/auth.service';
 export class UserService {
   private firestore = inject(Firestore);
 
-  // Récupérer tous les utilisateurs
+  // CORRECTION : On utilise new Observable + onSnapshot au lieu de collectionData
+  // Cela contourne le bug "outside injection context"
   getAllUsers(): Observable<UserProfile[]> {
-    const usersRef = collection(this.firestore, 'users');
-    // idField permet d'inclure l'ID du document dans l'objet sous le nom 'uid'
-    return collectionData(usersRef, { idField: 'uid' }) as Observable<UserProfile[]>;
+    return new Observable((observer) => {
+      const usersRef = collection(this.firestore, 'users');
+      
+      // Écoute temps réel native
+      const unsubscribe = onSnapshot(usersRef, 
+        (snapshot) => {
+          const users = snapshot.docs.map(d => ({ 
+            uid: d.id, 
+            ...d.data() 
+          })) as UserProfile[];
+          observer.next(users);
+        },
+        (error) => {
+          observer.error(error);
+        }
+      );
+
+      // Nettoyage lors du désabonnement
+      return () => unsubscribe();
+    });
   }
 
   // Mettre à jour le statut (Validation)

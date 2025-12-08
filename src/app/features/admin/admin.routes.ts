@@ -6,7 +6,8 @@ import { CarManagerComponent } from './cars/car-manager.component';
 import { TripManagerComponent } from './trips/trip-manager.component';
 import { CompanyManagerComponent } from './companies/company-manager.component';
 import { LiveMapComponent } from './live-map/live-map.component';
-import { MockDataComponent } from './mock-data/mock-data.component'; // NOUVEL IMPORT
+import { MockDataComponent } from './mock-data/mock-data.component';
+import { ChatComponent } from '../chat/chat.component'; // CHEMIN CORRIGÉ (../ au lieu de ../../)
 
 export const ADMIN_ROUTES: Routes = [
   {
@@ -19,7 +20,8 @@ export const ADMIN_ROUTES: Routes = [
       { path: 'cars', component: CarManagerComponent, title: 'Administration - Flotte' },
       { path: 'trips', component: TripManagerComponent, title: 'Administration - Trajets' },
       { path: 'companies', component: CompanyManagerComponent, title: 'Administration - Sociétés' },
-      { path: 'mock-data', component: MockDataComponent, title: 'Administration - Données Test' }, // NOUVELLE ROUTE
+      { path: 'mock-data', component: MockDataComponent, title: 'Administration - Données Test' },
+      { path: 'chat', component: ChatComponent, title: 'Administration - Messagerie' },
       { path: 'drivers', redirectTo: 'users' }
     ]
   }

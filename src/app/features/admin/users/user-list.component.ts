@@ -1,7 +1,9 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router'; // 1. Import du Router
 import { UserService } from '../../../core/services/user.service';
 import { AuthService, UserProfile } from '../../../core/auth/auth.service';
+import { ChatService } from '../../../core/services/chat.service';
 import { Observable } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 
@@ -33,19 +35,26 @@ import { toSignal } from '@angular/core/rxjs-interop';
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             @for (user of users$ | async; track user.uid) {
-              <tr class="hover:bg-gray-50">
+              <tr class="hover:bg-gray-50 group">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
                     <div class="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold mr-3">
                       {{ user.email.charAt(0).toUpperCase() }}
                     </div>
                     <div>
-                      <div class="text-sm font-medium text-gray-900">{{ user.email }}</div>
+                      <div class="text-sm font-medium text-gray-900 flex items-center gap-2">
+                         {{ user.email }}
+                         
+                         <button (click)="openChat(user)" 
+                                 class="opacity-50 group-hover:opacity-100 transition-opacity bg-indigo-100 hover:bg-indigo-200 text-indigo-700 p-1 rounded-full flex items-center justify-center h-6 w-6" 
+                                 title="Discuter">
+                            💬
+                         </button>
+                      </div>
                       <div class="text-xs text-gray-500">{{ user.company }}</div>
                     </div>
                   </div>
                 </td>
-                <!-- COLONNE TÉLÉPHONE -->
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold">
                    <a *ngIf="user.phoneNumber" [href]="'tel:' + user.phoneNumber" class="text-indigo-700 hover:text-indigo-900 hover:underline">
                      {{ user.phoneNumber }}
@@ -82,6 +91,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 export class UserListComponent {
   private userService = inject(UserService);
   private authService = inject(AuthService);
+  private chatService = inject(ChatService);
+  private router = inject(Router); // 2. Injection du Router
 
   users$: Observable<UserProfile[]> = this.userService.getAllUsers();
   currentUser = toSignal(this.authService.user$);
@@ -94,5 +105,11 @@ export class UserListComponent {
 
   promoteToAdmin(user: UserProfile) {
     if(confirm(`Promouvoir ${user.email} comme Admin ?`)) this.userService.updateUserRole(user.uid, 'ADMIN');
+  }
+
+  // 3. CORRECTION : Ouverture ET Redirection
+  openChat(user: UserProfile) {
+    this.chatService.startChatWith(user); // Sélectionne l'utilisateur
+    this.router.navigate(['/admin/chat']); // Redirige vers la page de chat
   }
 }
