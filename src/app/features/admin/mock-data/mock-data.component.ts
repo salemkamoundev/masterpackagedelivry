@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MockDataService } from '../../../core/services/mock-data.service';
 
@@ -13,63 +13,55 @@ import { MockDataService } from '../../../core/services/mock-data.service';
           <h2 class="text-3xl font-bold flex items-center gap-3">
              <span class="text-4xl">⚡</span> Générateur de Données
           </h2>
-          <p class="mt-2 text-purple-100">Outil de simulation pour peupler la base de données avec des scénarios réalistes.</p>
+          <p class="mt-2 text-purple-100">Réinitialisation et peuplement de la base de données.</p>
         </div>
 
         <div class="p-8">
            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-8">
               <div class="flex">
-                <div class="flex-shrink-0">
-                  <span class="text-yellow-400 text-xl">⚠️</span>
-                </div>
-                <div class="ml-3">
-                  <p class="text-sm text-yellow-700">
-                    <strong class="font-bold">Attention :</strong> Cette action est irréversible.
-                    Elle supprimera tous les utilisateurs (sauf l'admin), sociétés, véhicules et trajets existants 
-                    pour les remplacer par un jeu de données de test propre.
+                <span class="text-yellow-400 text-xl mr-3">⚠️</span>
+                <div>
+                  <p class="text-sm text-yellow-700 font-bold">Action Destructive</p>
+                  <p class="text-xs text-yellow-600 mt-1">
+                    Ceci supprimera tous les utilisateurs (sauf vous), trajets et sociétés.
                   </p>
                 </div>
               </div>
            </div>
 
-           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-              <div class="space-y-4">
-                 <h3 class="font-bold text-gray-800 text-lg border-b pb-2">Ce qui sera généré :</h3>
-                 <ul class="space-y-2 text-gray-600">
-                    <li class="flex items-center gap-2">🏢 <strong>3 Sociétés</strong> tunisiennes</li>
-                    <li class="flex items-center gap-2">👥 <strong>~12 Employés</strong> (3-5 par société)</li>
-                    <li class="flex items-center gap-2">🧢 <strong>~12 Chauffeurs</strong> (3-5 par société)</li>
-                    <li class="flex items-center gap-2">🚚 <strong>~12 Véhicules</strong> assignés</li>
-                    <li class="flex items-center gap-2">📦 <strong>~24 Trajets</strong> (Sfax, Tunis, Sousse...)</li>
-                 </ul>
-              </div>
-              
-              <div class="flex flex-col justify-center items-center bg-gray-50 rounded-xl p-6 border border-gray-100">
-                  <p class="text-center text-gray-500 mb-6 text-sm">
-                     Mot de passe par défaut pour tous les utilisateurs générés :
-                     <br><code class="bg-gray-200 px-2 py-1 rounded font-mono text-gray-800 font-bold">Admin123</code>
-                  </p>
-                  
-                  <button (click)="generate()" [disabled]="isLoading" 
-                     class="w-full py-4 px-6 rounded-xl text-white font-bold text-lg shadow-lg transform transition hover:scale-105 focus:outline-none focus:ring-4 focus:ring-purple-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-purple-600 to-indigo-600">
-                     {{ isLoading ? 'Génération en cours...' : 'Lancer la Génération' }}
-                  </button>
-              </div>
+           <div class="space-y-4 mb-8 text-gray-600">
+              <h3 class="font-bold text-gray-800 border-b pb-2">Ce qui sera créé :</h3>
+              <ul class="list-disc pl-5 space-y-1">
+                 <li>🏢 <strong>1 Société</strong> (Tunisia Express)</li>
+                 <li>👮 <strong>2 Administrateurs</strong> (admin1@test.com, admin2@test.com)</li>
+                 <li>🧢 <strong>3 Chauffeurs</strong> (chauffeur1@test.com...)</li>
+                 <li>🚚 <strong>3 Véhicules</strong> assignés</li>
+                 <li>📦 <strong>6 Trajets</strong> (2 par chauffeur)</li>
+              </ul>
            </div>
+              
+           <button (click)="generate()" [disabled]="isLoading()" 
+              class="w-full py-4 px-6 rounded-xl text-white font-bold text-lg shadow-lg transform transition hover:scale-105 disabled:opacity-50 disabled:transform-none bg-indigo-600 hover:bg-indigo-700">
+              {{ isLoading() ? 'Traitement en cours...' : 'Lancer la Génération' }}
+           </button>
         </div>
       </div>
     </div>
   `
 })
 export class MockDataComponent {
-  private mockDataService = inject(MockDataService);
-  isLoading = false;
+  private mockService = inject(MockDataService);
+  isLoading = signal(false);
 
   async generate() {
-    if(confirm('Êtes-vous sûr de vouloir réinitialiser la base de données ?')) {
-      this.isLoading = true;
-      await this.mockDataService.generateAll();
-      this.isLoading = false;
+    if(confirm('Êtes-vous sûr de vouloir tout écraser ?')) {
+      this.isLoading.set(true);
+      try {
+        await this.mockService.generateAll();
+      } catch (e) {
+        alert('Erreur: ' + e);
+      }
+      this.isLoading.set(false);
     }
   }
 }
