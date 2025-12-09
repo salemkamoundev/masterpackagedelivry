@@ -1,0 +1,88 @@
+<div class="flex h-screen bg-gray-100 overflow-hidden">
+
+  <div 
+    class="bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out"
+    [class.w-80]="isSidebarOpen"
+    [class.w-0]="!isSidebarOpen"
+    [class.opacity-0]="!isSidebarOpen"
+    [class.overflow-hidden]="!isSidebarOpen"
+    style="white-space: nowrap;"
+  >
+    <div class="h-16 flex items-center justify-between px-4 border-b border-gray-200 bg-gray-50">
+      <h2 class="font-bold text-gray-700">Discussions</h2>
+      <button (click)="toggleSidebar()" class="text-gray-400 hover:text-red-500 p-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-2 space-y-2">
+      <ng-container *ngIf="chats$ | async as chatList">
+        <div *ngFor="let chat of chatList" 
+             class="p-3 rounded-lg hover:bg-blue-50 cursor-pointer flex items-center space-x-3 transition">
+          <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
+            {{ chat.name ? chat.name[0] : 'U' }}
+          </div>
+          <div>
+            <p class="font-medium text-sm text-gray-800">{{ chat.name || 'Utilisateur' }}</p>
+            <p class="text-xs text-gray-500 truncate w-40">Cliquez pour voir</p>
+          </div>
+        </div>
+      </ng-container>
+      
+      <div *ngIf="(chats$ | async)?.length === 0" class="text-center text-gray-400 mt-10 text-sm">
+        Aucune discussion
+      </div>
+    </div>
+  </div>
+
+  <div class="flex-1 flex flex-col h-full relative">
+    
+    <div class="h-16 border-b border-gray-200 bg-white flex items-center px-4 shadow-sm z-10">
+      
+      <button *ngIf="!isSidebarOpen" 
+              (click)="toggleSidebar()" 
+              class="mr-4 p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
+      <h3 class="font-bold text-lg text-gray-800">Messagerie</h3>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
+      <div *ngFor="let msg of messages$ | async" 
+           class="flex w-full" 
+           [ngClass]="{'justify-end': msg.senderId === injector.get(Auth).currentUser?.uid, 'justify-start': msg.senderId !== injector.get(Auth).currentUser?.uid}">
+        
+        <div class="max-w-[70%] p-3 rounded-lg shadow-sm"
+             [ngClass]="{
+               'bg-blue-600 text-white rounded-br-none': msg.senderId === injector.get(Auth).currentUser?.uid,
+               'bg-white text-gray-800 rounded-bl-none': msg.senderId !== injector.get(Auth).currentUser?.uid
+             }">
+          {{ msg.text }}
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 bg-white border-t border-gray-200">
+      <div class="flex items-center space-x-2">
+        <input type="text" 
+               placeholder="Écrivez votre message..." 
+               class="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:border-blue-500 transition"
+               #msgInput
+               (keyup.enter)="sendMessage(msgInput.value); msgInput.value=''">
+        
+        <button (click)="sendMessage(msgInput.value); msgInput.value=''" 
+                class="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 w-10 h-10 flex items-center justify-center transition shadow-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,127 @@
+<div class="flex h-[calc(100vh-64px)] bg-gray-100 overflow-hidden relative">
+  <div 
+    class="flex flex-col bg-white border-r border-gray-200 h-full transition-all"
+    [ngClass]="{
+      'w-full': true,              
+      'hidden': selectedChatId,    /* Mobile: Caché si un chat est ouvert */
+      'flex': !selectedChatId,     /* Mobile: Visible si pas de chat */
+      'md:flex': true,             /* Desktop: Toujours visible */
+      'md:w-80': true              /* Desktop: Largeur fixe */
+    }"
+  >
+    <div class="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+      <h2 class="font-bold text-gray-700 text-lg">Discussions</h2>
+      <span class="text-xs text-gray-400 bg-gray-200 px-2 py-1 rounded-full">
+        {{ (chats$ | async)?.length || 0 }}
+      </span>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <ng-container *ngIf="chats$ | async as chatList">
+        <div *ngFor="let chat of chatList" 
+             (click)="selectChat(chat.id)"
+             class="p-4 border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition flex items-center gap-3"
+             [class.bg-blue-100]="selectedChatId === chat.id">
+          
+          <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xl shrink-0">
+            {{ chat.name ? chat.name[0].toUpperCase() : 'U' }}
+          </div>
+          
+          <div class="flex-1 min-w-0"> <p class="font-medium text-gray-900 truncate">{{ chat.name || 'Utilisateur' }}</p>
+            <p class="text-sm text-gray-500 truncate">{{ chat.role || 'Client' }}</p>
+          </div>
+
+          <div class="text-gray-300 md:hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+            </svg>
+          </div>
+        </div>
+      </ng-container>
+
+      <div *ngIf="(chats$ | async)?.length === 0" class="p-8 text-center text-gray-400">
+        Aucune conversation trouvée.
+      </div>
+    </div>
+  </div>
+
+
+  <div 
+    class="flex-col bg-gray-50 h-full"
+    [ngClass]="{
+      'w-full fixed inset-0 z-50 bg-white': true, /* Mobile: Mode plein écran par dessus tout */
+      'hidden': !selectedChatId,                   /* Mobile: Caché si rien sélectionné */
+      'flex': selectedChatId,                      /* Mobile: Visible si sélectionné */
+      'md:static': true,                           /* Desktop: Pas de fixed position */
+      'md:flex': true,                             /* Desktop: Toujours flex */
+      'md:flex-1': true,                           /* Desktop: Prend l'espace restant */
+      'md:w-auto': true                            /* Desktop: Reset largeur */
+    }"
+  >
+
+    <div *ngIf="!selectedChatId" class="hidden md:flex flex-col items-center justify-center h-full text-gray-400">
+      <div class="bg-white p-6 rounded-full shadow-sm mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      </div>
+      <p class="text-lg">Sélectionnez une conversation</p>
+    </div>
+
+    <ng-container *ngIf="selectedChatId">
+      
+      <div class="h-16 border-b border-gray-200 bg-white flex items-center px-4 shadow-sm shrink-0">
+        <button (click)="clearSelection()" class="md:hidden mr-3 p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-full">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        
+        <div class="flex items-center">
+           <div class="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold mr-3">
+             C
+           </div>
+           <div>
+             <h3 class="font-bold text-gray-800">Discussion</h3>
+             <p class="text-xs text-green-500 flex items-center">
+               <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span> En ligne
+             </p>
+           </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+        <div *ngFor="let msg of messages$ | async" 
+             class="flex w-full"
+             [ngClass]="{'justify-end': msg.senderId === injector.get(Auth).currentUser?.uid, 'justify-start': msg.senderId !== injector.get(Auth).currentUser?.uid}">
+          
+          <div class="max-w-[75%] px-4 py-2 rounded-2xl shadow-sm text-sm"
+               [ngClass]="{
+                 'bg-blue-600 text-white rounded-br-none': msg.senderId === injector.get(Auth).currentUser?.uid,
+                 'bg-white text-gray-800 border border-gray-100 rounded-bl-none': msg.senderId !== injector.get(Auth).currentUser?.uid
+               }">
+            {{ msg.text }}
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-white border-t border-gray-200 shrink-0 safe-area-bottom">
+        <div class="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2">
+          <input type="text" 
+                 #msgInput
+                 (keyup.enter)="sendMessage(selectedChatId, 'TODO_MY_ID', msgInput.value); msgInput.value=''"
+                 placeholder="Écrivez un message..." 
+                 class="flex-1 bg-transparent border-none focus:ring-0 text-gray-800 placeholder-gray-500 text-sm">
+          
+          <button (click)="sendMessage(selectedChatId, 'TODO_MY_ID', msgInput.value); msgInput.value=''" 
+                  class="text-blue-600 font-bold p-2 hover:bg-blue-50 rounded-full transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform rotate-90" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+    </ng-container>
+  </div>
+</div>

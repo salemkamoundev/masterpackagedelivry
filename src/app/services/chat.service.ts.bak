@@ -1,0 +1,47 @@
+import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
+import { Database, ref, listVal, push, set, serverTimestamp } from '@angular/fire/database';
+import { Observable } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ChatService {
+  private db = inject(Database);
+  private injector = inject(Injector);
+
+  constructor() {}
+
+  // --- 1. FONCTION CLEF : GÉRER L'ID UNIQUE ---
+  // Cette fonction trie les IDs pour que "Admin+Client" donne 
+  // le même résultat que "Client+Admin".
+  private createChatId(user1: string, user2: string): string {
+    return [user1, user2].sort().join('_');
+  }
+
+  // --- 2. RÉCUPÉRER LES MESSAGES ---
+  // On passe les deux IDs, le service calcule le bon chemin
+  getMessages(currentUser: string, otherUser: string): Observable<any[]> {
+    const chatId = this.createChatId(currentUser, otherUser);
+    const chatRef = ref(this.db, 'chats/' + chatId);
+
+    // Correctif Injection Context inclus
+    return runInInjectionContext(this.injector, () => {
+      return listVal(chatRef);
+    });
+  }
+
+  // --- 3. ENVOYER UN MESSAGE ---
+  sendMessage(senderId: string, receiverId: string, text: string) {
+    const chatId = this.createChatId(senderId, receiverId);
+    const chatRef = ref(this.db, 'chats/' + chatId);
+
+    const message = {
+      senderId: senderId,
+      receiverId: receiverId, // Utile pour filtrer si besoin
+      text: text,
+      timestamp: serverTimestamp() // Utilise l'heure du serveur Firebase
+    };
+
+    return push(chatRef, message);
+  }
+}
