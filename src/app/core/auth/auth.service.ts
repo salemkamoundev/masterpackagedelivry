@@ -2,33 +2,18 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { from, Observable, of } from 'rxjs';
 import { switchMap, map } from 'rxjs/operators';
-
-// AngularFire
 import { Auth, user } from '@angular/fire/auth';
 import { Firestore } from '@angular/fire/firestore';
-
-// SDK Natif
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  User 
-} from 'firebase/auth';
-
-import { 
-  doc, 
-  setDoc, 
-  getDoc 
-} from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
   email: string;
+  displayName: string; // NOUVEAU
   role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN';
   company: string;
-  phoneNumber: string; // NOUVEAU CHAMP OBLIGATOIRE
+  phoneNumber: string;
   isActive: boolean;
   createdAt: Date;
 }
@@ -40,7 +25,6 @@ export class AuthService {
   private auth = inject(Auth);
   private firestore = inject(Firestore);
   private router = inject(Router);
-
   user$ = user(this.auth);
   currentUserProfile = signal<UserProfile | null>(null);
 
@@ -55,18 +39,18 @@ export class AuthService {
     return from(signInWithPopup(this.auth, provider));
   }
 
-  // Signature mise à jour avec phoneNumber
-  register(email: string, pass: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  register(email: string, pass: string, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
     return from(createUserWithEmailAndPassword(this.auth, email, pass)).pipe(
-      switchMap(credential => this.createProfile(credential.user, role, company, phoneNumber))
+      switchMap(credential => this.createProfile(credential.user, name, role, company, phoneNumber))
     );
   }
 
-  // Signature mise à jour avec phoneNumber
-  createProfile(user: User, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  // Signature mise à jour avec 'name'
+  createProfile(user: User, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
     const userProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
+      displayName: name, // Stockage du nom
       role: role,
       company: company,
       phoneNumber: phoneNumber,

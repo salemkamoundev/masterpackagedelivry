@@ -32,7 +32,7 @@ export class MockDataService {
       createdAt: new Date().toISOString()
     });
 
-    // 2. UTILISATEURS
+    // 2. UTILISATEURS (Avec displayName)
     const drivers: any[] = [];
     
     // -> 3 Chauffeurs
@@ -41,6 +41,7 @@ export class MockDataService {
        const driver = {
           uid: uid,
           email: `chauffeur${i}@test.com`,
+          displayName: `Chauffeur ${i} Ben Test`, // Nom ajouté
           role: 'DRIVER',
           company: 'Tunisia Express',
           phoneNumber: '+216 20 000 00' + i,
@@ -66,6 +67,7 @@ export class MockDataService {
        const admin = {
           uid: uid,
           email: `admin${i}@test.com`,
+          displayName: `Admin ${i} Chef`, // Nom ajouté
           role: 'ADMIN',
           company: 'Tunisia Express',
           phoneNumber: '+216 50 000 00' + i,
@@ -75,7 +77,7 @@ export class MockDataService {
        batch.set(doc(this.firestore, 'users', uid), admin);
     }
 
-    // 3. TRAJETS MIXTES (Colis + Passagers)
+    // 3. TRAJETS MIXTES
     drivers.forEach((driver, index) => {
        for(let j=0; j<2; j++) {
           const start = this.cities[Math.floor(Math.random() * this.cities.length)];
@@ -93,37 +95,15 @@ export class MockDataService {
              carId: 'car_' + driver.uid,
              company: 'Tunisia Express',
              currentLocation: { lat: start.lat, lng: start.lng, city: start.name, lastUpdate: new Date().toISOString() },
-             
-             // COLIS
-             parcels: [
-                { 
-                  description: 'PC Portable', 
-                  weight: 2.5, 
-                  recipientName: 'Client Alpha', 
-                  recipientPhone: '22 555 111',
-                  recipientAddress: '12 Rue de la Liberté',
-                  delivered: false 
-                }
-             ],
-
-             // PASSAGERS (Nouveau)
-             passengers: [
-                {
-                   name: 'Ahmed Ben Salah',
-                   phone: '98 123 456',
-                   pickupLocation: start.name + ' Centre',
-                   dropoffLocation: end.name + ' Gare',
-                   isDroppedOff: false
-                }
-             ],
-
+             parcels: [{ description: 'PC Portable', weight: 2.5, recipientName: 'Client Alpha', recipientPhone: '22 555 111', recipientAddress: '12 Rue de la Liberté', delivered: false }],
+             passengers: [{ name: 'Ahmed Ben Salah', phone: '98 123 456', pickupLocation: start.name + ' Centre', dropoffLocation: end.name + ' Gare', isDroppedOff: false }],
              extraRequests: []
           });
        }
     });
 
     await batch.commit();
-    alert('Données générées : Trajets mixtes (Colis + Passagers) créés.');
+    alert('Données générées (Noms utilisateurs inclus + Super Admin protégé).');
   }
 
   private async clearFirestore() {

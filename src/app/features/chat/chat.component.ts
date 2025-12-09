@@ -17,8 +17,13 @@ import { toSignal } from '@angular/core/rxjs-interop';
         <div class="flex-1 overflow-y-auto">
           @for (user of contacts$ | async; track user.uid) {
             <div (click)="selectUser(user)" class="p-4 border-b border-gray-100 cursor-pointer hover:bg-white flex items-center gap-3" [class.bg-white]="selectedUser()?.uid === user.uid">
-              <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">{{ user.email.charAt(0).toUpperCase() }}</div>
-              <div class="overflow-hidden"><p class="text-sm font-semibold truncate">{{ user.email }}</p><p class="text-xs text-gray-500">{{ user.role }}</p></div>
+              <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
+                 {{ (user.displayName || user.email).charAt(0).toUpperCase() }}
+              </div>
+              <div class="overflow-hidden">
+                 <p class="text-sm font-semibold truncate">{{ user.displayName || user.email }}</p>
+                 <p class="text-xs text-gray-500">{{ user.role }}</p>
+              </div>
             </div>
           }
         </div>
@@ -26,8 +31,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
       <div class="flex-1 flex flex-col bg-slate-50 relative">
         @if (selectedUser(); as recipient) {
           <div class="p-4 bg-white border-b shadow-sm flex items-center gap-3">
-             <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">{{ recipient.email.charAt(0).toUpperCase() }}</div>
-             <div><h3 class="font-bold text-gray-800">{{ recipient.email }}</h3></div>
+             <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">{{ (recipient.displayName || recipient.email).charAt(0).toUpperCase() }}</div>
+             <div><h3 class="font-bold text-gray-800">{{ recipient.displayName || recipient.email }}</h3></div>
           </div>
           <div class="flex-1 overflow-y-auto p-4 space-y-3" #scrollContainer>
              @for (msg of messages$ | async; track msg.createdAt) {

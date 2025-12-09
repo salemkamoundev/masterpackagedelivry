@@ -15,9 +15,7 @@ import { take } from 'rxjs/operators';
       <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
         <div class="text-center">
           <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Finaliser l'inscription</h2>
-          <p class="mt-2 text-sm text-gray-600">
-            Veuillez compléter vos informations pour accéder à la plateforme.
-          </p>
+          <p class="mt-2 text-sm text-gray-600">Complétez vos informations.</p>
         </div>
         
         <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
@@ -28,15 +26,19 @@ import { take } from 'rxjs/operators';
             </div>
           </div>
 
-          <!-- TÉLÉPHONE : TEXTE SIMPLE OBLIGATOIRE -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Nom complet</label>
+            <input formControlName="name" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700">Téléphone</label>
-            <input formControlName="phoneNumber" type="text" placeholder="Numéro de téléphone" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm p-2">
+            <input formControlName="phoneNumber" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Métier</label>
-            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
+            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
               <option value="" disabled>Choisir un métier</option>
               <option value="DRIVER">Chauffeur</option>
               <option value="EMPLOYEE">Employé</option>
@@ -45,16 +47,13 @@ import { take } from 'rxjs/operators';
 
           <div>
             <label class="block text-sm font-medium text-gray-700">Votre Société</label>
-            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md border p-2">
+            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
               <option value="" disabled>Choisir une société</option>
-              @for (company of activeCompanies(); track company.uid) {
-                 <option [value]="company.name">{{ company.name }}</option>
-              }
+              @for (company of activeCompanies(); track company.uid) { <option [value]="company.name">{{ company.name }}</option> }
             </select>
           </div>
 
-          <button type="submit" [disabled]="profileForm.invalid"
-            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
+          <button type="submit" [disabled]="profileForm.invalid" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
             Valider et Accéder
           </button>
         </form>
@@ -70,9 +69,10 @@ export class CompleteProfileComponent implements OnInit {
 
   currentUser$ = this.authService.user$;
   activeCompanies = this.companyService.activeCompanies;
-
+  
   profileForm = this.fb.group({
-    phoneNumber: ['', Validators.required], // Validation simple
+    name: ['', Validators.required], // Nouveau
+    phoneNumber: ['', Validators.required],
     role: ['', Validators.required],
     company: ['', Validators.required]
   });
@@ -80,6 +80,10 @@ export class CompleteProfileComponent implements OnInit {
   ngOnInit() {
     this.currentUser$.pipe(take(1)).subscribe(user => {
       if (!user) this.router.navigate(['/login']);
+      else {
+          // Pré-remplir avec le nom Google si dispo
+          this.profileForm.patchValue({ name: user.displayName || '' });
+      }
     });
   }
 
@@ -87,14 +91,15 @@ export class CompleteProfileComponent implements OnInit {
     if (this.profileForm.valid) {
       this.currentUser$.pipe(take(1)).subscribe(user => {
         if (user) {
-          const { role, company, phoneNumber } = this.profileForm.value;
-          this.authService.createProfile(user, role as any, company!, phoneNumber!).subscribe({
+          const { name, role, company, phoneNumber } = this.profileForm.value;
+          // Correction de l'appel pour inclure 'name'
+          this.authService.createProfile(user, name!, role as any, company!, phoneNumber!).subscribe({
             next: () => {
               alert('Profil complété !');
               if (role === 'DRIVER') this.router.navigate(['/driver']);
               else this.router.navigate(['/admin']);
             },
-            error: (err) => alert('Erreur création profil : ' + err.message)
+            error: (err) => alert('Erreur : ' + err.message)
           });
         }
       });
