@@ -1,69 +1,234 @@
 #!/bin/bash
-echo "-----------------------------------------------------------"
-echo "🔧 Patch Notifications - ChatService + receiverId + Firestore"
-echo "-----------------------------------------------------------"
 
-FILE="src/app/core/services/chat.service.ts"
+echo "--------------------------------------------------------"
+echo "🔧 SNIPPET 1 : NotificationService avec getUnreadCount()"
+echo "--------------------------------------------------------"
+cat << 'EOF'
 
-if [ ! -f "$FILE" ]; then
-  echo "❌ Fichier introuvable : $FILE"
-  exit 1
-fi
+// src/app/core/services/notification.service.ts
 
-# Sauvegarde
-cp "$FILE" "${FILE}.bak"
-echo "📦 Sauvegarde créée : chat.service.ts.bak"
+import { Injectable, inject } from '@angular/core';
+import {
+  Firestore,
+  collection,
+  addDoc,
+  collectionData,
+  query,
+  where,
+  updateDoc,
+  doc
+} from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
-# Réécriture complète de sendMessage()
-sed -i "" '/async sendMessage/,/getMessages/{
-/async sendMessage/,/}/d
-}' "$FILE"
+export interface AppNotification {
+  id?: string;
+  userId: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  type: 'CHAT' | 'TRIP' | 'INFO' | 'ALERT' | 'SUCCESS';
+  tripId?: string;
+}
 
-cat << 'EOF' >> "$FILE"
+@Injectable({
+  providedIn: 'root'
+})
+export class NotificationService {
+  private firestore = inject(Firestore);
 
-  // ------------------------------
-  // Nouveau sendMessage corrigé
-  // ------------------------------
-  async sendMessage(chatId: string, senderId: string, text: string) {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+  // Créer une notification
+  send(
+    userId: string,
+    message: string,
+    type: AppNotification['type'] = 'INFO',
+    extra?: { tripId?: string }
+  ) {
+    const notif: AppNotification = {
+      userId,
+      message,
+      read: false,
+      createdAt: new Date().toISOString(),
+      type,
+      ...(extra ?? {})
+    };
 
-    // 1. ➜ Sauvegarde RTDB (affichage live du chat)
-    const messagesRef = ref(this.db, `chats/${chatId}/messages`);
-    const newMessageRef = push(messagesRef);
+    return addDoc(collection(this.firestore, 'notifications'), notif);
+  }
 
-    await set(newMessageRef, {
-      senderId,
-      text: trimmed,
-      createdAt: Date.now()
-    });
+  // Stream des notifications d'un utilisateur
+  getNotifications(userId: string): Observable<AppNotification[]> {
+    const col = collection(this.firestore, 'notifications');
+    const q = query(col, where('userId', '==', userId));
+    return collectionData(q, { idField: 'id' }) as Observable<AppNotification[]>;
+  }
 
-    // 2. ➜ Déterminer receiverId automatiquement
-    const [u1, u2] = chatId.split('_');
-    const receiverId = senderId === u1 ? u2 : u1;
+  // Compteur de notifications non lues, optionnellement filtrées par type
+  getUnreadCount(userId: string, type?: AppNotification['type']): Observable<number> {
+    const col = collection(this.firestore, 'notifications');
 
-    // 3. ➜ Sauvegarde Firestore (pour le robot de notifications)
-    await addDoc(collection(this.firestore, 'messages'), {
-      chatId,
-      senderId,
-      receiverId,
-      text: trimmed,
-      createdAt: Date.now()
-    });
-
-    // 4. ➜ Notification interne "in-app"
-    try {
-      await this.notifService.send(
-        receiverId,
-        `Nouveau message : ${trimmed.substring(0, 50)}`
+    let q;
+    if (type) {
+      q = query(
+        col,
+        where('userId', '==', userId),
+        where('read', '==', false),
+        where('type', '==', type)
       );
-    } catch (e) {
-      console.error("Erreur lors de l'envoi de la notification in-app :", e);
+    } else {
+      q = query(
+        col,
+        where('userId', '==', userId),
+        where('read', '==', false)
+      );
+    }
+
+    return collectionData(q).pipe(map((notifs) => notifs.length));
+  }
+
+  // Marquer une notification comme lue
+  async markAsRead(id: string) {
+    const ref = doc(this.firestore, 'notifications', id);
+    await updateDoc(ref, { read: true });
+  }
+
+  // Marquer toutes les notifications d'un type comme lues
+  async markAllAsRead(userId: string, type?: AppNotification['type']) {
+    const col = collection(this.firestore, 'notifications');
+    let q;
+    if (type) {
+      q = query(
+        col,
+        where('userId', '==', userId),
+        where('type', '==', type),
+        where('read', '==', false)
+      );
+    } else {
+      q = query(
+        col,
+        where('userId', '==', userId),
+        where('read', '==', false)
+      );
+    }
+
+    const snap = await import('@angular/fire/firestore').then(m => m.getDocs(q));
+    for (const docSnap of snap.docs) {
+      await updateDoc(docSnap.ref, { read: true });
     }
   }
+}
 EOF
 
-echo "✅ Patch appliqué correctement."
-echo "👉 Vérifie maintenant que ton script Node reçoit bien receiverId"
-echo "👉 N'oublie pas de relancer : ng serve"
-echo "-----------------------------------------------------------"
+echo
+echo "--------------------------------------------------------"
+echo "🔧 SNIPPET 2 : DriverDashboardComponent (TS) avec badges"
+echo "--------------------------------------------------------"
+cat << 'EOF'
+
+// src/app/features/driver/dashboard/driver-dashboard.component.ts
+
+import { Component, OnInit, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { NotificationService } from '../../../core/services/notification.service';
+import { AuthService, UserProfile } from '../../../core/auth/auth.service';
+import { Observable } from 'rxjs';
+import { map, filter } from 'rxjs/operators';
+
+@Component({
+  selector: 'app-driver-dashboard',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './driver-dashboard.component.html',
+  styleUrls: ['./driver-dashboard.component.scss']
+})
+export class DriverDashboardComponent implements OnInit {
+
+  private notifService = inject(NotificationService);
+  private authService = inject(AuthService);
+
+  currentUser$!: Observable<UserProfile | null>;
+  unreadChatCount$!: Observable<number>;
+  unreadTripCount$!: Observable<number>;
+
+  constructor() {}
+
+  ngOnInit(): void {
+    this.currentUser$ = this.authService.user$;
+
+    // Pastille messages
+    this.unreadChatCount$ = this.authService.user$.pipe(
+      filter((u): u is UserProfile => !!u),
+      switchMap((u) => this.notifService.getUnreadCount(u.uid, 'CHAT'))
+    );
+
+    // Pastille trajets
+    this.unreadTripCount$ = this.authService.user$.pipe(
+      filter((u): u is UserProfile => !!u),
+      switchMap((u) => this.notifService.getUnreadCount(u.uid, 'TRIP'))
+    );
+  }
+
+  // Appelé quand le chauffeur ouvre l'onglet Messages
+  markChatAsRead() {
+    this.currentUser$.pipe(filter((u): u is UserProfile => !!u))
+      .subscribe((user) => {
+        this.notifService.markAllAsRead(user.uid, 'CHAT');
+      });
+  }
+
+  // Appelé quand le chauffeur ouvre l'onglet Trajets
+  markTripAsRead() {
+    this.currentUser$.pipe(filter((u): u is UserProfile => !!u))
+      .subscribe((user) => {
+        this.notifService.markAllAsRead(user.uid, 'TRIP');
+      });
+  }
+}
+EOF
+
+echo
+echo "--------------------------------------------------------"
+echo "🔧 SNIPPET 3 : DriverDashboard HTML avec pastilles"
+echo "--------------------------------------------------------"
+cat << 'EOF'
+<!-- src/app/features/driver/dashboard/driver-dashboard.component.html -->
+
+<div class="driver-dashboard">
+
+  <!-- Bouton Messages avec pastille -->
+  <button class="btn btn-outline-primary position-relative"
+          (click)="markChatAsRead()">
+    💬 Messages
+    <span *ngIf="(unreadChatCount$ | async) as chatCount">
+      <span *ngIf="chatCount > 0"
+            class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle">
+        {{ chatCount }}
+      </span>
+    </span>
+  </button>
+
+  <!-- Exemple de carte trajet avec pastille -->
+  <div *ngFor="let trip of trips$ | async" class="card position-relative">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="card-title">{{ trip.from }} → {{ trip.to }}</h5>
+          <p class="card-text">
+            {{ trip.date | date:'short' }} - {{ trip.price }} TND
+          </p>
+        </div>
+
+        <!-- Pastille rouge si notif TRIP non lue pour ce trajet -->
+        <span *ngIf="trip.hasUnreadNotification"
+              class="badge bg-danger rounded-pill">
+          !
+        </span>
+      </div>
+    </div>
+  </div>
+
+</div>
+EOF
+
+echo
+echo "✅ Terminé. Copie les snippets affichés au-dessus dans les fichiers indiqués."
