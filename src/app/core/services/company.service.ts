@@ -1,7 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore,collection, addDoc, updateDoc, doc } from '@angular/fire/firestore';
 import { collectionData } from '@angular/fire/firestore'; // Import AngularFire pour l'Observable
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore'; // Imports Natifs pour les actions
 import { Observable } from 'rxjs';
 
 export interface Company {

@@ -1,234 +1,150 @@
 #!/bin/bash
 
-echo "--------------------------------------------------------"
-echo "🔧 SNIPPET 1 : NotificationService avec getUnreadCount()"
-echo "--------------------------------------------------------"
-cat << 'EOF'
+FILE="src/app/features/admin/dashboard/admin-dashboard.component.ts"
 
-// src/app/core/services/notification.service.ts
+echo "--- 👮 MISE À JOUR HEADER ADMIN (Bouton Messages + Pastille) ---"
 
-import { Injectable, inject } from '@angular/core';
-import {
-  Firestore,
-  collection,
-  addDoc,
-  collectionData,
-  query,
-  where,
-  updateDoc,
-  doc
-} from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-
-export interface AppNotification {
-  id?: string;
-  userId: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-  type: 'CHAT' | 'TRIP' | 'INFO' | 'ALERT' | 'SUCCESS';
-  tripId?: string;
-}
-
-@Injectable({
-  providedIn: 'root'
-})
-export class NotificationService {
-  private firestore = inject(Firestore);
-
-  // Créer une notification
-  send(
-    userId: string,
-    message: string,
-    type: AppNotification['type'] = 'INFO',
-    extra?: { tripId?: string }
-  ) {
-    const notif: AppNotification = {
-      userId,
-      message,
-      read: false,
-      createdAt: new Date().toISOString(),
-      type,
-      ...(extra ?? {})
-    };
-
-    return addDoc(collection(this.firestore, 'notifications'), notif);
-  }
-
-  // Stream des notifications d'un utilisateur
-  getNotifications(userId: string): Observable<AppNotification[]> {
-    const col = collection(this.firestore, 'notifications');
-    const q = query(col, where('userId', '==', userId));
-    return collectionData(q, { idField: 'id' }) as Observable<AppNotification[]>;
-  }
-
-  // Compteur de notifications non lues, optionnellement filtrées par type
-  getUnreadCount(userId: string, type?: AppNotification['type']): Observable<number> {
-    const col = collection(this.firestore, 'notifications');
-
-    let q;
-    if (type) {
-      q = query(
-        col,
-        where('userId', '==', userId),
-        where('read', '==', false),
-        where('type', '==', type)
-      );
-    } else {
-      q = query(
-        col,
-        where('userId', '==', userId),
-        where('read', '==', false)
-      );
-    }
-
-    return collectionData(q).pipe(map((notifs) => notifs.length));
-  }
-
-  // Marquer une notification comme lue
-  async markAsRead(id: string) {
-    const ref = doc(this.firestore, 'notifications', id);
-    await updateDoc(ref, { read: true });
-  }
-
-  // Marquer toutes les notifications d'un type comme lues
-  async markAllAsRead(userId: string, type?: AppNotification['type']) {
-    const col = collection(this.firestore, 'notifications');
-    let q;
-    if (type) {
-      q = query(
-        col,
-        where('userId', '==', userId),
-        where('type', '==', type),
-        where('read', '==', false)
-      );
-    } else {
-      q = query(
-        col,
-        where('userId', '==', userId),
-        where('read', '==', false)
-      );
-    }
-
-    const snap = await import('@angular/fire/firestore').then(m => m.getDocs(q));
-    for (const docSnap of snap.docs) {
-      await updateDoc(docSnap.ref, { read: true });
-    }
-  }
-}
-EOF
-
-echo
-echo "--------------------------------------------------------"
-echo "🔧 SNIPPET 2 : DriverDashboardComponent (TS) avec badges"
-echo "--------------------------------------------------------"
-cat << 'EOF'
-
-// src/app/features/driver/dashboard/driver-dashboard.component.ts
-
-import { Component, OnInit, inject } from '@angular/core';
+cat > "$FILE" << 'EOF'
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { NotificationService } from '../../../core/services/notification.service';
-import { AuthService, UserProfile } from '../../../core/auth/auth.service';
-import { Observable } from 'rxjs';
-import { map, filter } from 'rxjs/operators';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../../../core/auth/auth.service';
+import { ChatService } from '../../../core/services/chat.service';
+import { ChatComponent } from '../../chat/chat.component';
+import { switchMap } from 'rxjs/operators';
+import { of } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 @Component({
-  selector: 'app-driver-dashboard',
+  selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule],
-  templateUrl: './driver-dashboard.component.html',
-  styleUrls: ['./driver-dashboard.component.scss']
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ChatComponent],
+  template: `
+    <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+      
+      <div *ngIf="isMobileMenuOpen" (click)="closeMobileMenu()" 
+           class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998] lg:hidden transition-opacity">
+      </div>
+
+      <aside class="fixed inset-y-0 left-0 z-[10000] w-72 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform lg:translate-x-0"
+             [ngClass]="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
+        
+        <div class="h-20 flex items-center px-8 border-b border-slate-800 bg-slate-950/50">
+          <span class="text-xl font-bold tracking-wide text-white">Master<span class="text-indigo-400">DELIVERY</span></span>
+        </div>
+
+        <nav class="flex-1 py-8 px-4 space-y-1 overflow-y-auto">
+          
+          <a routerLink="/admin" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">🏠</span> Accueil
+          </a>
+
+          <a routerLink="/admin/live-map" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">🌍</span> Carte Live
+          </a>
+
+          <a routerLink="/admin/trips" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">📦</span> Trajets
+          </a>
+
+          <a routerLink="/admin/users" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">👥</span> Utilisateurs
+          </a>
+
+          <a routerLink="/admin/cars" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">🚚</span> Véhicules
+          </a>
+          
+          <a routerLink="/admin/companies" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">🏢</span> Sociétés
+          </a>
+
+          <a routerLink="/admin/chat" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800 justify-between">
+             <div class="flex items-center"><span class="mr-3">💬</span> Messagerie</div>
+             @if ((unreadMessagesCount() ?? 0) > 0) {
+                <span class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ unreadMessagesCount() }}</span>
+             }
+          </a>
+
+          <a routerLink="/admin/mock-data" routerLinkActive="bg-purple-600/20 text-white border-l-4 border-purple-500" (click)="closeMobileMenu()"
+             class="flex items-center px-4 py-3 rounded-r-lg text-purple-300 hover:text-white mb-1 mt-6 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
+             <span class="mr-3">⚡</span> Données Test
+          </a>
+          
+          <button (click)="logout()" class="w-full flex items-center px-4 py-3 text-red-400 hover:text-red-300 mt-6 border-t border-slate-800 pt-4 cursor-pointer hover:bg-slate-800 transition-all">
+             <span class="mr-3">🚪</span> Déconnexion
+          </button>
+        </nav>
+      </aside>
+
+      <div class="lg:pl-72 flex flex-col h-screen w-full relative transition-all duration-300">
+        
+        <header class="bg-white border-b h-16 flex items-center justify-between px-4 lg:hidden sticky top-0 z-20 shadow-sm">
+             <div class="flex items-center gap-2">
+                 <button (click)="toggleMobileMenu()" class="text-2xl text-indigo-600 p-2">☰</button>
+                 <span class="font-bold text-gray-800">Master<span class="text-indigo-600">Delivery</span></span>
+             </div>
+
+             <button (click)="isChatOpen = true" class="relative p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
+                <span class="relative block">
+                    <span class="text-2xl">💬</span>
+                    @if ((unreadMessagesCount() ?? 0) > 0) {
+                        <span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm animate-pulse">
+                            {{ unreadMessagesCount() }}
+                        </span>
+                    }
+                </span>
+             </button>
+        </header>
+
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-4">
+             <router-outlet></router-outlet>
+        </main>
+      </div>
+
+      <div *ngIf="isChatOpen" class="fixed inset-0 z-[10001] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col relative animate-fade-in-up">
+             <div class="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
+                <h3 class="font-bold text-lg flex items-center gap-2">💬 Messagerie</h3>
+                <button (click)="isChatOpen = false" class="text-white/80 hover:text-white text-xl font-bold p-2">✕</button>
+             </div>
+             <div class="flex-1 overflow-hidden relative">
+                <app-chat class="block h-full w-full"></app-chat>
+             </div>
+         </div>
+      </div>
+
+    </div>
+  `
 })
-export class DriverDashboardComponent implements OnInit {
-
-  private notifService = inject(NotificationService);
+export class AdminDashboardComponent {
   private authService = inject(AuthService);
+  private chatService = inject(ChatService);
 
-  currentUser$!: Observable<UserProfile | null>;
-  unreadChatCount$!: Observable<number>;
-  unreadTripCount$!: Observable<number>;
+  isMobileMenuOpen = false;
+  isChatOpen = false;
 
-  constructor() {}
+  // Signal pour le compteur de messages
+  unreadMessagesCount = toSignal(
+    this.authService.user$.pipe(
+      switchMap(user => user ? this.chatService.getUnreadCount(user.uid) : of(0))
+    ),
+    { initialValue: 0 }
+  );
 
-  ngOnInit(): void {
-    this.currentUser$ = this.authService.user$;
-
-    // Pastille messages
-    this.unreadChatCount$ = this.authService.user$.pipe(
-      filter((u): u is UserProfile => !!u),
-      switchMap((u) => this.notifService.getUnreadCount(u.uid, 'CHAT'))
-    );
-
-    // Pastille trajets
-    this.unreadTripCount$ = this.authService.user$.pipe(
-      filter((u): u is UserProfile => !!u),
-      switchMap((u) => this.notifService.getUnreadCount(u.uid, 'TRIP'))
-    );
-  }
-
-  // Appelé quand le chauffeur ouvre l'onglet Messages
-  markChatAsRead() {
-    this.currentUser$.pipe(filter((u): u is UserProfile => !!u))
-      .subscribe((user) => {
-        this.notifService.markAllAsRead(user.uid, 'CHAT');
-      });
-  }
-
-  // Appelé quand le chauffeur ouvre l'onglet Trajets
-  markTripAsRead() {
-    this.currentUser$.pipe(filter((u): u is UserProfile => !!u))
-      .subscribe((user) => {
-        this.notifService.markAllAsRead(user.uid, 'TRIP');
-      });
-  }
+  userProfile = toSignal(this.authService.user$.pipe(switchMap(user => user ? this.authService.getUserProfile(user.uid) : of(null))));
+  
+  toggleMobileMenu() { this.isMobileMenuOpen = !this.isMobileMenuOpen; }
+  closeMobileMenu() { this.isMobileMenuOpen = false; }
+  logout() { this.authService.logout().subscribe(); }
 }
 EOF
 
-echo
-echo "--------------------------------------------------------"
-echo "🔧 SNIPPET 3 : DriverDashboard HTML avec pastilles"
-echo "--------------------------------------------------------"
-cat << 'EOF'
-<!-- src/app/features/driver/dashboard/driver-dashboard.component.html -->
-
-<div class="driver-dashboard">
-
-  <!-- Bouton Messages avec pastille -->
-  <button class="btn btn-outline-primary position-relative"
-          (click)="markChatAsRead()">
-    💬 Messages
-    <span *ngIf="(unreadChatCount$ | async) as chatCount">
-      <span *ngIf="chatCount > 0"
-            class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle">
-        {{ chatCount }}
-      </span>
-    </span>
-  </button>
-
-  <!-- Exemple de carte trajet avec pastille -->
-  <div *ngFor="let trip of trips$ | async" class="card position-relative">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <h5 class="card-title">{{ trip.from }} → {{ trip.to }}</h5>
-          <p class="card-text">
-            {{ trip.date | date:'short' }} - {{ trip.price }} TND
-          </p>
-        </div>
-
-        <!-- Pastille rouge si notif TRIP non lue pour ce trajet -->
-        <span *ngIf="trip.hasUnreadNotification"
-              class="badge bg-danger rounded-pill">
-          !
-        </span>
-      </div>
-    </div>
-  </div>
-
-</div>
-EOF
-
-echo
-echo "✅ Terminé. Copie les snippets affichés au-dessus dans les fichiers indiqués."
+echo "✅ Header Admin mis à jour avec le bouton Messages."

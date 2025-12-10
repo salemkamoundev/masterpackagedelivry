@@ -1,0 +1,233 @@
+const admin = require('firebase-admin');
+const path = require('path');
+const { log } = require('console');
+
+// ⚠️ Clé de service Firebase (téléchargée depuis la console Firebase)
+const serviceAccount = require('../serviceAccountKey.json');
+
+// Juste pour vérifier qu'on est sur le bon projet
+console.log('🧾 serviceAccount project_id =', serviceAccount.project_id);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+const messaging = admin.messaging();
+
+console.log("Tentative de connexion à Firestore...");
+console.log("------------------------------------------------");
+console.log("👀 LE ROBOT EST EN LIGNE !");
+console.log("📡 Il surveille Firestore en attente de nouveautés...");
+console.log("------------------------------------------------");
+
+// ==================================================================
+// 1. SURVEILLANCE DES MESSAGES (Collection 'messages')
+// ==================================================================
+//
+// Structure attendue d'un doc dans 'messages':
+// {
+//   chatId: string,
+//   senderId: string,
+//   receiverId: string,
+//   text: string,
+//   createdAt: number
+// }
+//
+// Quand un nouveau message arrive :
+//  - on envoie un push au receiverId
+//  - SI push OK → on supprime le document message
+// ==================================================================
+
+db.collection('messages').onSnapshot(
+  (snapshot) => {
+    snapshot.docChanges().forEach(async (change) => {
+      if (change.type !== 'added') return;
+
+      const docRef = change.doc.ref;
+      const msgId = change.doc.id;
+      const msg = change.doc.data();
+
+      const { chatId, senderId, receiverId, text } = msg;
+
+      if (!receiverId || !senderId || !chatId || !text) {
+        console.log('⚠️ Message incomplet, ignoré :', msgId, msg);
+        return;
+      }
+
+      console.log(`💬 Nouveau message détecté pour : ${receiverId}`);
+      console.log('Message :', text);
+
+      await sendNotification(
+        receiverId,
+        {
+          title: 'Nouveau message',
+          body: text,
+          type: 'CHAT_MSG',
+          sender: senderId,
+          content: text
+        },
+        docRef // 👉 on passera cette ref pour supprimer le message après succès
+      );
+    });
+  },
+  (error) => {
+    console.error("❌ ERREUR FIRESTORE (messages) :", error);
+    if (error.code === 'permission-denied') {
+      console.error("👉 Vérifie tes Firestore Rules pour la collection 'messages'.");
+    }
+  }
+);
+
+// ==================================================================
+// 2. SURVEILLANCE DES COURSES (Collection 'rides')
+// ==================================================================
+//
+// Ici on envoie une notif au chauffeur (driverId) quand une course
+// avec status 'pending' est créée.
+// ==================================================================
+
+db.collection('rides').where('status', '==', 'pending').onSnapshot(
+  (snapshot) => {
+    snapshot.docChanges().forEach(async (change) => {
+      if (change.type !== 'added') return;
+
+      const ride = change.doc.data();
+      const rideId = change.doc.id;
+      const driverId = ride.driverId;
+
+      if (!driverId) {
+        console.log('⚠️ Course sans driverId, ignorée :', rideId, ride);
+        return;
+      }
+
+      console.log(`🚖 Nouvelle course (ride) pour le chauffeur : ${driverId} (rideId=${rideId})`);
+
+      await sendNotification(
+        driverId,
+        {
+          title: 'Nouvelle course',
+          body: `De ${ride.from || ''} vers ${ride.to || ''}`,
+          type: 'NEW_RIDE',
+          from: ride.from || '',
+          to: ride.to || '',
+          price: ride.price || ''
+        }
+      );
+    });
+  },
+  (error) => {
+    console.error("❌ ERREUR FIRESTORE (rides) :", error);
+    if (error.code === 'permission-denied') {
+      console.error("👉 Vérifie tes Firestore Rules pour la collection 'rides'.");
+    }
+  }
+);
+
+// ==================================================================
+// 3. SURVEILLANCE DES TRAJETS (Collection 'trips')
+// ==================================================================
+//
+// Quand un nouveau trajet est saisi (doc 'trips' ajouté), on envoie
+// une notification au chauffeur cible (driverId).
+//
+// ⚠️ Si ta collection s'appelle autrement (ex: 'trajets'),
+//    renomme-la ici.
+// ==================================================================
+
+db.collection('trips').onSnapshot(
+  (snapshot) => {
+    snapshot.docChanges().forEach(async (change) => {
+      if (change.type !== 'added') return;
+
+      const trip = change.doc.data();
+      const tripId = change.doc.id;
+
+      const driverId = trip.driverId;
+      if (!driverId) {
+        console.log('⚠️ Trip sans driverId, ignoré :', tripId, trip);
+        return;
+      }
+
+      console.log(`🆕 Nouveau trajet créé pour le chauffeur : ${driverId} (tripId=${tripId})`);
+
+      await sendNotification(
+        driverId,
+        {
+          title: 'Nouveau trajet',
+          body: `De ${trip.departure || trip.from || ''} vers ${trip.destination || trip.to || ''}`,
+          type: 'NEW_TRIP',
+          from: trip.departure || trip.from || '',
+          to: trip.destination || trip.to || '',
+          price: trip.price || ''
+        }
+      );
+    });
+  },
+  (error) => {
+    console.error("❌ ERREUR FIRESTORE (trips) :", error);
+  }
+);
+
+// ==================================================================
+// 4. FONCTION D'ENVOI DE NOTIFICATION + SUPPRESSION MESSAGE
+// ==================================================================
+//
+//  - userId        : uid du destinataire
+//  - data          : { title, body, type, from, to, price, sender, content }
+//  - messageDocRef : ref Firestore du message (si on veut le supprimer après)
+// ==================================================================
+
+async function sendNotification(userId, data, messageDocRef = null) {
+  try {
+    const userDoc = await db.collection('users').doc(userId).get();
+
+    if (!userDoc.exists) {
+      console.log(`❌ User ${userId} introuvable dans Firestore.`);
+      return;
+    }
+
+    const userData = userDoc.data();
+    const fcmToken = userData.fcmToken;
+
+    if (!fcmToken) {
+      console.log(`⚠️ User ${userId} n'a pas de token FCM.`);
+      return;
+    }
+
+    console.log(`📡 Envoi de la notification à ${userId} avec le token : ${fcmToken}`);
+
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: data.title || 'Notification',
+        body: data.body || ''
+      },
+      data: {
+        type: data.type || '',
+        fromUser: data.from || '',
+        toUser: data.to || '',
+        price: String(data.price || ''),
+        sender: data.sender || '',
+        content: data.content || ''
+      }
+    };
+
+    const response = await messaging.send(message);
+    console.log('✅ Notification envoyée ! ID:', response);
+
+    // 🗑 Supprimer le message Firestore après envoi réussi (si fourni)
+    if (messageDocRef) {
+      await messageDocRef.delete();
+      console.log('🗑 Message Firestore supprimé :', messageDocRef.id);
+    }
+
+  } catch (error) {
+    console.error("❌ Erreur lors de l'envoi FCM :", error);
+
+    // 👉 On NE SUPPRIME PAS le token FCM, même si invalide
+    if (error.code === 'messaging/registration-token-not-registered') {
+      console.warn('⚠️ Token FCM invalide, mais NE PAS supprimer comme demandé.');
+    }
+  }
+}

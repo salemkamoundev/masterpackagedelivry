@@ -107,6 +107,8 @@ export class ChatComponent implements OnInit {
     if (uid) {
        const chatId = this.chatService.getConversationId(uid, user.uid);
        this.messages$ = this.chatService.getMessages(chatId);
+       this.chatService.markChatAsRead(chatId, uid).catch(e => console.error(e));
+       this.chatService.markChatAsRead(chatId, uid).catch(e => console.error("Erreur lecture chat:", e)); // MARQUER COMME LU
        // Scroll automatique vers le bas
        setTimeout(() => { this.scrollToBottom(); }, 200);
     }

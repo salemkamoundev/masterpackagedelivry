@@ -4,10 +4,11 @@ import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } fr
 import { AuthService } from '../../../core/auth/auth.service';
 import { TripService, Trip, Parcel, Passenger } from '../../../core/services/trip.service';
 import { CarService, Car } from '../../../core/services/car.service';
+import { ChatService } from '../../../core/services/chat.service';
 import { NotificationService, AppNotification } from '../../../core/services/notification.service';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { combineLatest, map, switchMap, of } from 'rxjs';
-import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
+import { combineLatest, map, switchMap, of, Observable } from 'rxjs';
+import { Firestore, collection, collectionData, doc, updateDoc } from '@angular/fire/firestore';
 import { ChatComponent } from '../../chat/chat.component';
 
 @Component({
@@ -30,18 +31,31 @@ import { ChatComponent } from '../../chat/chat.component';
          }
       </div>
 
-      <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
+            <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
         <div class="max-w-7xl mx-auto py-4 px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div class="flex items-center gap-2">
              <span class="text-2xl">🧢</span>
              <h1 class="text-xl font-bold text-gray-900">Espace Chauffeur</h1>
           </div>
           <div class="flex items-center gap-3 w-full sm:w-auto">
-             <button (click)="isChatOpen = true" class="flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-100 flex items-center justify-center gap-2">
-                <span>💬</span> Messages
+             <button (click)="isChatOpen = true" class="relative flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-100 flex items-center justify-center gap-2">
+                <span class="relative flex items-center gap-2">
+                    <span>💬</span> Messages
+                    @if ((unreadMessagesCount() ?? 0) > 0) {
+                        <span class="absolute -top-3 -right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm animate-pulse">
+                            {{ unreadMessagesCount() }}
+                        </span>
+                    }
+                </span>
              </button>
-             <button (click)="openCreateModal()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 flex items-center justify-center gap-2"><span>➕</span> Nouveau Trajet</button>
-             <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-2 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
+
+             <button (click)="openCreateModal()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 flex items-center justify-center gap-2">
+                <span>➕</span> Nouveau Trajet
+             </button>
+
+             <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-2 rounded hover:bg-red-100 transition-colors">
+                Déconnexion
+             </button>
           </div>
         </div>
       </header>
@@ -162,6 +176,7 @@ export class DriverDashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private tripService = inject(TripService);
   private carService = inject(CarService);
+  private chatService = inject(ChatService);
   private notifService: NotificationService = inject(NotificationService);
   private firestore = inject(Firestore);
   private fb = inject(FormBuilder);
@@ -173,6 +188,20 @@ export class DriverDashboardComponent implements OnInit {
   selectedTrip = signal<Trip | null>(null);
   isCreateModalOpen = false;
   isChatOpen = false;
+
+  // Compteur de messages sécurisé (ne peut pas être undefined)
+  unreadMessagesCount = toSignal(
+    this.user$.pipe(
+      switchMap(user => {
+        if (user) return this.chatService.getUnreadCount(user.uid);
+        return of(0);
+      })
+    ),
+    { initialValue: 0 }
+  );
+
+
+  
   notifications$ = of<AppNotification[]>([]);
 
   activeTab: 'parcels' | 'passengers' = 'parcels';
@@ -197,14 +226,45 @@ export class DriverDashboardComponent implements OnInit {
   get parcelsArray() { return this.createForm.get('parcels') as FormArray; }
   get passengersArray() { return this.createForm.get('passengers') as FormArray; }
 
-  ngOnInit() {
+    ngOnInit() {
     this.user$.subscribe(user => {
-      if (user) {
+        if (user) {
         this.notifications$ = this.notifService.getNotifications(user.uid);
-      }
-    });
-  }
 
+        // C'EST CETTE LIGNE QUI FAIT LE LIEN AVEC LE SERVICE
+
+        }
+    });
+    }
+getUnreadCount(currentUserId: string): Observable<number> {
+    // Ecoute la collection 'chats' de Firestore en temps réel
+    const chatsRef = collection(this.firestore, 'chats');
+    
+    return collectionData(chatsRef, { idField: 'uid' } as any).pipe(
+      map((chats: any[]) => {
+        let unreadCount = 0;
+        chats.forEach(chat => {
+          if (!chat.uid) return;
+          const parts = chat.uid.split('_');
+          if (parts.length !== 2) return;
+
+          const [u1, u2] = parts;
+          
+          // Si je suis u1 et que read_u1 est faux (ou non défini) -> Non lu
+          if (u1 === currentUserId && chat.read_u1 === false) {
+            unreadCount++;
+          } 
+          // Si je suis u2 et que read_u2 est faux (ou non défini) -> Non lu
+          else if (u2 === currentUserId && chat.read_u2 === false) {
+            unreadCount++;
+          }
+          // Note : on vérifie "=== false" pour ne compter que si explicitement non lu. 
+          // Si le champ n'existe pas (vieux messages), on peut choisir de ne pas afficher de notif.
+        });
+        return unreadCount;
+      })
+    );
+  }
   addParcel() { this.parcelsArray.push(this.fb.group({ description: [''], recipientName: [''], recipientPhone: [''], recipientAddress: [''], weight: [1], delivered: [false] })); }
   addPassenger() { this.passengersArray.push(this.fb.group({ name: [''], phone: [''], pickupLocation: [''], dropoffLocation: [''], isDroppedOff: [false] })); }
   
