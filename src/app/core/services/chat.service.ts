@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, ref, push, set, listVal, query, orderByChild } from '@angular/fire/database';
-import { Observable, map, BehaviorSubject } from 'rxjs';
-import { UserProfile } from '../auth/auth.service';
+import { Observable, BehaviorSubject, combineLatest, of } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { UserProfile, AuthService } from '../auth/auth.service';
 import { UserService } from './user.service';
 
 export interface ChatMessage {
@@ -16,10 +17,14 @@ export interface ChatMessage {
 export class ChatService {
   private db = inject(Database);
   private userService = inject(UserService);
+  private authService = inject(AuthService);
+  
   private targetUserSource = new BehaviorSubject<UserProfile | null>(null);
   targetUser$ = this.targetUserSource.asObservable();
 
-  startChatWith(user: UserProfile) { this.targetUserSource.next(user); }
+  startChatWith(user: UserProfile) { 
+    this.targetUserSource.next(user);
+  }
 
   getConversationId(user1: string, user2: string): string {
     return user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
@@ -40,9 +45,31 @@ export class ChatService {
     return listVal(q) as Observable<ChatMessage[]>;
   }
 
+  // --- LOGIQUE CHAT GLOBAL ---
   getContacts(currentUserId: string): Observable<UserProfile[]> {
     return this.userService.getAllUsers().pipe(
-      map(users => users.filter(u => u.uid !== currentUserId))
+      map(users => {
+        // 1. Définition du Super Admin (Virtuel ou Réel)
+        const superAdminEmail = 'admin@gmail.com';
+        
+        // Si le Super Admin n'est pas dans la liste (cas du compte système), on l'ajoute virtuellement
+        const adminExists = users.find(u => u.email === superAdminEmail || u.role === 'SUPER_ADMIN');
+        if (!adminExists) {
+            users.unshift({
+                uid: 'super_admin_system',
+                email: superAdminEmail,
+                displayName: '⚡ Support / Admin',
+                role: 'SUPER_ADMIN',
+                company: 'System',
+                isActive: true,
+                phoneNumber: '',
+                createdAt: new Date()
+            });
+        }
+
+        // 2. Filtrage simple : Tout le monde sauf moi
+        return users.filter(u => u.uid !== currentUserId);
+      })
     );
   }
 }
