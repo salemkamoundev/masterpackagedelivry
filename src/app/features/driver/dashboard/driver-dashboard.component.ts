@@ -52,8 +52,13 @@ import { ChatComponent } from '../../chat/chat.component';
         <div *ngIf="filteredMissions().length > 0; else noMissions">
            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               @for (trip of filteredMissions(); track trip.uid) {
-                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
+                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02] relative"
                       [ngClass]="{'border-indigo-500': trip.status === 'PENDING', 'border-blue-500': trip.status === 'IN_PROGRESS', 'border-green-500': trip.status === 'COMPLETED'}">
+                      
+                      <span *ngIf="trip.hasNewItems" class="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse shadow-md z-10">
+                          🔔 Nouveau
+                      </span>
+
                       <div class="p-5">
                         <div class="flex justify-between items-start mb-3">
                            <div><h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3><p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p></div>
@@ -80,38 +85,6 @@ import { ChatComponent } from '../../chat/chat.component';
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Départ</label><input formControlName="departure" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Destination</label><input formControlName="destination" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div class="md:col-span-2"><label class="block text-sm font-bold text-gray-700 mb-1">Date</label><input type="datetime-local" formControlName="date" class="w-full border p-2 rounded bg-gray-50"></div>
-                    </div>
-                    <div class="flex gap-4 mb-4 border-b">
-                        <button type="button" (click)="activeTab = 'parcels'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'parcels' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">📦 Colis</button>
-                        <button type="button" (click)="activeTab = 'passengers'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'passengers' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">🙋 Passagers</button>
-                    </div>
-                    <div [class.hidden]="activeTab !== 'parcels'" class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
-                       <button type="button" (click)="addParcel()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Colis</button>
-                       <div formArrayName="parcels" class="space-y-3">
-                          @for (p of parcelsArray.controls; track $index) {
-                             <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
-                                 <button type="button" (click)="removeParcel($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
-                                 <div class="col-span-2"><input formControlName="description" placeholder="Description" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="recipientName" placeholder="Nom" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="recipientPhone" placeholder="Tél" class="w-full border p-1 rounded"></div>
-                                 <div class="col-span-2"><input formControlName="recipientAddress" placeholder="Adresse" class="w-full border p-1 rounded"></div>
-                             </div>
-                          }
-                       </div>
-                    </div>
-                    <div [class.hidden]="activeTab !== 'passengers'" class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-6">
-                       <button type="button" (click)="addPassenger()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Passager</button>
-                       <div formArrayName="passengers" class="space-y-3">
-                          @for (p of passengersArray.controls; track $index) {
-                             <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
-                                 <button type="button" (click)="removePassenger($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
-                                 <div class="col-span-2"><input formControlName="name" placeholder="Nom Prénom" class="w-full border p-1 rounded font-bold"></div>
-                                 <div class="col-span-2"><input formControlName="phone" placeholder="Téléphone" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="pickupLocation" placeholder="Lieu Prise" class="w-full border p-1 rounded text-xs"></div>
-                                 <div><input formControlName="dropoffLocation" placeholder="Lieu Dépose" class="w-full border p-1 rounded text-xs"></div>
-                             </div>
-                          }
-                       </div>
                     </div>
                     <div class="flex justify-end gap-3"><button type="button" (click)="closeCreateModal()" class="px-4 py-2 text-gray-600">Annuler</button><button type="submit" [disabled]="createForm.invalid" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Créer</button></div>
                  </form>
@@ -276,7 +249,14 @@ export class DriverDashboardComponent implements OnInit {
       }
   }
   
-  viewDetails(trip: Trip) { this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); }
+  // CORRECTION : Quand on clique sur Voir Détails, on enlève le flag 'Nouveau'
+  async viewDetails(trip: Trip) { 
+      this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); 
+      if (trip.hasNewItems && trip.uid) {
+          await this.tripService.updateTrip(trip.uid, { hasNewItems: false });
+      }
+  }
+
   closeDetails() { this.selectedTrip.set(null); }
   
   async updateStatus(status: any) { 

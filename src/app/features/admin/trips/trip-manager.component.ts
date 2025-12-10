@@ -119,12 +119,14 @@ import { combineLatest, of } from 'rxjs';
 
     <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up flex flex-col max-h-[90vh]">
+            
             <div class="bg-indigo-900 text-white p-4 flex justify-between items-center shrink-0">
-                <h3 class="font-bold text-lg">Ajouter au Trajet</h3>
+                <h3 class="font-bold text-lg">Ajouter au Trajet : {{ selectedTripForRequest.departure }} ➝ {{ selectedTripForRequest.destination }}</h3>
                 <button (click)="closeRequestModal()" class="text-white hover:text-gray-300">✕</button>
             </div>
             
             <div class="p-6 overflow-y-auto">
+                
                 <div *ngIf="tempParcels.length > 0 || tempPassengers.length > 0" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <h4 class="font-bold text-yellow-800 mb-2 flex items-center gap-2">📝 Liste à valider ({{ tempParcels.length + tempPassengers.length }})</h4>
                     <ul class="space-y-2 text-sm">
@@ -261,7 +263,8 @@ export class TripManagerComponent {
   openChat(u: UserProfile) { this.chatService.startChatWith(u); this.router.navigate(['/admin/chat']); }
   
   handleTrackClick(t: Trip) { 
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(t.departure)}&destination=${encodeURIComponent(t.destination)}&travelmode=driving`;
+    // CORRECTION ICI: Nous utilisons une méthode concaténée pour éviter l'erreur de backticks dans le script shell
+    const url = 'https://www.google.com/maps/dir/?api=1&origin=$' + encodeURIComponent(t.departure) + '&destination=' + encodeURIComponent(t.destination) + '&travelmode=driving';
     window.open(url, '_blank'); 
   }
 
@@ -296,7 +299,6 @@ export class TripManagerComponent {
     });
   });
 
-  // LOGIQUE MULTI-ITEMS
   requestType: 'PARCEL' | 'PASSENGER' = 'PARCEL';
   tempParcels: Parcel[] = [];
   tempPassengers: Passenger[] = [];
@@ -329,22 +331,25 @@ export class TripManagerComponent {
     }
 
     try {
+        const updates: any = {};
         if (this.tempParcels.length > 0) {
-            const currentParcels = trip.parcels || [];
-            await this.tripService.updateParcels(trip.uid, [...currentParcels, ...this.tempParcels]);
+            updates.parcels = [...(trip.parcels || []), ...this.tempParcels];
         }
         if (this.tempPassengers.length > 0) {
-            const currentPassengers = trip.passengers || [];
-            await this.tripService.updatePassengers(trip.uid, [...currentPassengers, ...this.tempPassengers]);
+            updates.passengers = [...(trip.passengers || []), ...this.tempPassengers];
         }
+        
+        updates.hasNewItems = true;
+
+        await this.tripService.updateTrip(trip.uid, updates);
 
         if (trip.driverId && trip.driverId !== 'PENDING') {
             const countP = this.tempParcels.length;
             const countPass = this.tempPassengers.length;
-            let msg = "Mise à jour trajet : ";
-            if (countP > 0) msg += `${countP} Colis `;
-            if (countPass > 0) msg += `${countPass} Passagers `;
-            msg += "ajouté(s).";
+            let msg = 'Mise à jour trajet : ';
+            if (countP > 0) msg += countP + ' Colis ';
+            if (countPass > 0) msg += countPass + ' Passagers ';
+            msg += 'ajouté(s).';
             await this.notifService.send(trip.driverId, msg, 'INFO');
         }
 

@@ -7,7 +7,7 @@ export interface Passenger {
   phone: string;
   pickupLocation?: string;
   dropoffLocation?: string;
-  isDroppedOff?: boolean; // Statut de la course (terminée ou non)
+  isDroppedOff?: boolean;
 }
 
 export interface Parcel {
@@ -30,7 +30,7 @@ export interface TripRequest {
   type: 'PARCEL' | 'PASSENGER';
   description?: string;
   parcels?: Parcel[];
-  passengers?: Passenger[]; // Ajout support demande passager
+  passengers?: Passenger[];
   requesterName: string;
   requesterEmail?: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
@@ -45,18 +45,18 @@ export interface Trip {
   departureLng?: number;
   destinationLat?: number;
   destinationLng?: number;
-
   date: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   driverId: string;
   carId: string;
   company: string;
   currentLocation?: GeoLocation;
-  
-  parcels: Parcel[];      // Liste des colis
-  passengers: Passenger[]; // NOUVEAU : Liste des passagers
-  
+  parcels: Parcel[];
+  passengers: Passenger[];
   extraRequests?: TripRequest[];
+  
+  // NOUVEAU CHAMP POUR LA PASTILLE
+  hasNewItems?: boolean;
 }
 
 @Injectable({
@@ -79,6 +79,12 @@ export class TripService {
     return deleteDoc(tripRef);
   }
 
+  // Méthode générique pour tout mettre à jour d'un coup
+  updateTrip(tripId: string, data: Partial<Trip>) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, data);
+  }
+
   updatePosition(tripId: string, location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED') {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { 
@@ -92,7 +98,6 @@ export class TripService {
     return updateDoc(tripRef, { parcels });
   }
 
-  // NOUVEAU : Mise à jour des passagers (pour cocher déposé/non déposé)
   updatePassengers(tripId: string, passengers: Passenger[]) {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { passengers });
