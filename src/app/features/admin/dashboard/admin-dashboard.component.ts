@@ -10,7 +10,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ChatComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       

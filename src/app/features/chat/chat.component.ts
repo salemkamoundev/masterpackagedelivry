@@ -22,7 +22,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
             <div (click)="selectUser(user)" class="p-4 border-b border-gray-100 cursor-pointer hover:bg-white flex items-center gap-3" 
                  [class.bg-white]="selectedUser()?.uid === user.uid"
                  [class.bg-indigo-50]="selectedUser()?.uid === user.uid"> <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
-                 {{ (user.displayName || user.email).charAt(0).toUpperCase() }}
+                 {{ (user.displayName || user.email) }}
               </div>
               <div class="overflow-hidden">
                  <p class="text-sm font-semibold truncate">{{ user.displayName || user.email }}</p>
@@ -37,7 +37,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
         @if (selectedUser(); as recipient) {
            <div class="p-4 bg-white border-b shadow-sm flex items-center gap-3 shrink-0">
              <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
-                {{ (recipient.displayName || recipient.email).charAt(0).toUpperCase() }}
+                {{ (recipient.displayName || recipient.email) }}
              </div>
              <div>
                 <h3 class="font-bold text-gray-800">{{ recipient.displayName || recipient.email }}</h3>

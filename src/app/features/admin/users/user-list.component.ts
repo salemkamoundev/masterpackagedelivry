@@ -35,7 +35,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
                     <div class="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold mr-3 text-lg">
-                       {{ (user.displayName || user.email).charAt(0).toUpperCase() }}
+                       {{ (user.displayName || user.email) }}
                     </div>
                     <div>
                       <div class="text-sm font-bold text-gray-900 flex items-center gap-2">

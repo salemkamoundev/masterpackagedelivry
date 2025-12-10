@@ -1082,14 +1082,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="flex h-[calc(100vh-100px)] bg-white border rounded-lg shadow-sm overflow-hidden m-4">
+    <div class="flex h-full bg-white overflow-hidden">
+      
       <div class="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
-        <div class="p-4 border-b border-gray-200 bg-indigo-50"><h2 class="font-bold text-indigo-900">Discussions</h2></div>
+        <div class="p-4 border-b border-gray-200 bg-indigo-50">
+            <h2 class="font-bold text-indigo-900">Discussions</h2>
+        </div>
         <div class="flex-1 overflow-y-auto">
           @for (user of contacts$ | async; track user.uid) {
-            <div (click)="selectUser(user)" class="p-4 border-b border-gray-100 cursor-pointer hover:bg-white flex items-center gap-3" [class.bg-white]="selectedUser()?.uid === user.uid">
-              <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
-                 {{ (user.displayName || user.email).charAt(0).toUpperCase() }}
+            <div (click)="selectUser(user)" class="p-4 border-b border-gray-100 cursor-pointer hover:bg-white flex items-center gap-3" 
+                 [class.bg-white]="selectedUser()?.uid === user.uid"
+                 [class.bg-indigo-50]="selectedUser()?.uid === user.uid"> <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
+                 {{ (user.displayName || user.email) }}
               </div>
               <div class="overflow-hidden">
                  <p class="text-sm font-semibold truncate">{{ user.displayName || user.email }}</p>
@@ -1099,28 +1103,46 @@ import { toSignal } from '@angular/core/rxjs-interop';
           }
         </div>
       </div>
+
       <div class="flex-1 flex flex-col bg-slate-50 relative">
         @if (selectedUser(); as recipient) {
-          <div class="p-4 bg-white border-b shadow-sm flex items-center gap-3">
-             <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">{{ (recipient.displayName || recipient.email).charAt(0).toUpperCase() }}</div>
-             <div><h3 class="font-bold text-gray-800">{{ recipient.displayName || recipient.email }}</h3></div>
+           <div class="p-4 bg-white border-b shadow-sm flex items-center gap-3 shrink-0">
+             <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
+                {{ (recipient.displayName || recipient.email) }}
+             </div>
+             <div>
+                <h3 class="font-bold text-gray-800">{{ recipient.displayName || recipient.email }}</h3>
+             </div>
           </div>
+
           <div class="flex-1 overflow-y-auto p-4 space-y-3" #scrollContainer>
              @for (msg of messages$ | async; track msg.createdAt) {
                 <div class="flex" [ngClass]="msg.senderId === currentUser()?.uid ? 'justify-end' : 'justify-start'">
-                   <div class="max-w-[70%] px-4 py-2 rounded-2xl text-sm shadow-sm" [ngClass]="msg.senderId === currentUser()?.uid ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none'">
+                   <div class="max-w-[70%] px-4 py-2 rounded-2xl text-sm shadow-sm break-words" 
+                        [ngClass]="msg.senderId === currentUser()?.uid ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none'">
                       {{ msg.text }}
-                      <div class="text-[10px] mt-1 opacity-70 text-right">{{ msg.createdAt | date:'HH:mm' }}</div>
+                      <div class="text-[10px] mt-1 opacity-70 text-right">
+                        {{ msg.createdAt | date:'HH:mm' }}
+                      </div>
                    </div>
                 </div>
              }
           </div>
-          <form (ngSubmit)="sendMessage()" class="p-4 bg-white border-t flex gap-2">
-             <input [(ngModel)]="newMessage" name="msg" placeholder="..." class="flex-1 border-gray-300 rounded-full px-4 py-2 bg-gray-100 outline-none">
-             <button type="submit" [disabled]="!newMessage.trim()" class="bg-indigo-600 text-white w-10 h-10 rounded-full shadow flex items-center justify-center">➤</button>
+
+          <form (ngSubmit)="sendMessage()" class="p-4 bg-white border-t flex gap-2 shrink-0">
+             <input [(ngModel)]="newMessage" name="msg" placeholder="Écrivez votre message..." 
+                    class="flex-1 border border-gray-300 rounded-full px-4 py-2 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+             <button type="submit" [disabled]="!newMessage.trim()" 
+                     class="bg-indigo-600 hover:bg-indigo-700 text-white w-10 h-10 rounded-full shadow flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                ➤
+             </button>
           </form>
+
         } @else {
-          <div class="flex-1 flex flex-col items-center justify-center text-gray-400"><span class="text-6xl mb-4">💬</span><p>Sélectionnez une conversation</p></div>
+          <div class="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <span class="text-6xl mb-4">💬</span>
+              <p>Sélectionnez une conversation</p>
+          </div>
         }
       </div>
     </div>
@@ -1130,6 +1152,7 @@ export class ChatComponent implements OnInit {
   private chatService = inject(ChatService);
   public authService = inject(AuthService);
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
+  
   currentUser = toSignal(this.authService.user$);
   contacts$: Observable<UserProfile[]> = of([]);
   messages$: Observable<ChatMessage[]> = of([]);
@@ -1137,32 +1160,44 @@ export class ChatComponent implements OnInit {
   newMessage = '';
 
   ngOnInit() {
-    this.authService.user$.subscribe(u => { if (u) this.contacts$ = this.chatService.getContacts(u.uid); });
+    this.authService.user$.subscribe(u => { 
+        if (u) this.contacts$ = this.chatService.getContacts(u.uid); 
+    });
+
+    // Sélectionner automatiquement l'utilisateur cible s'il est défini dans le service (ex: clic depuis la carte)
     combineLatest([this.authService.user$, this.chatService.targetUser$]).subscribe(([currentUser, targetUser]) => {
       if (currentUser && targetUser && this.selectedUser()?.uid !== targetUser.uid) {
          this.selectUser(targetUser, currentUser.uid);
       }
     });
   }
+
   selectUser(user: UserProfile, currentUserId?: string) {
     this.selectedUser.set(user);
     const uid = currentUserId || this.currentUser()?.uid;
     if (uid) {
        const chatId = this.chatService.getConversationId(uid, user.uid);
        this.messages$ = this.chatService.getMessages(chatId);
-       setTimeout(() => { if(this.scrollContainer) this.scrollContainer.nativeElement.scrollTop = 99999; }, 200);
+       // Scroll automatique vers le bas
+       setTimeout(() => { this.scrollToBottom(); }, 200);
     }
   }
+
   sendMessage() {
     if (this.currentUser()?.uid && this.selectedUser() && this.newMessage.trim()) {
        const chatId = this.chatService.getConversationId(this.currentUser()!.uid, this.selectedUser()!.uid);
        this.chatService.sendMessage(chatId, this.currentUser()!.uid, this.newMessage);
        this.newMessage = '';
-       setTimeout(() => { if(this.scrollContainer) this.scrollContainer.nativeElement.scrollTop = 99999; }, 100);
+       setTimeout(() => { this.scrollToBottom(); }, 100);
     }
   }
-}
 
+  private scrollToBottom() {
+      if(this.scrollContainer) {
+          this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
+      }
+  }
+}
 
 
 ==============================================================================
@@ -1311,10 +1346,14 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, switchMap, of } from 'rxjs';
 import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
 
+
+import { ChatComponent } from '../../chat/chat.component';
+
 @Component({
   selector: 'app-driver-dashboard',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  
+  imports: [CommonModule, ReactiveFormsModule, ChatComponent],
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col">
       <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
@@ -1324,6 +1363,10 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
              <h1 class="text-xl font-bold text-gray-900">Espace Chauffeur</h1>
           </div>
           <div class="flex items-center gap-3 w-full sm:w-auto">
+             <button (click)="isChatOpen = true" class="flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-100 flex items-center justify-center gap-2">
+                <span>💬</span> Messages
+             </button>
+             
              <button (click)="openCreateModal()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 flex items-center justify-center gap-2"><span>➕</span> Nouveau Trajet</button>
              <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-2 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
           </div>
@@ -1338,7 +1381,7 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
               @for (trip of filteredMissions(); track trip.uid) {
                  <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
                       [ngClass]="{'border-indigo-500': trip.status === 'PENDING', 'border-blue-500': trip.status === 'IN_PROGRESS', 'border-green-500': trip.status === 'COMPLETED'}">
-                    <div class="p-5">
+                     <div class="p-5">
                         <div class="flex justify-between items-start mb-3">
                            <div><h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3><p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p></div>
                            <span class="px-2 py-1 text-xs font-bold rounded uppercase tracking-wide" [ngClass]="{'bg-indigo-100 text-indigo-700': trip.status === 'PENDING', 'bg-blue-100 text-blue-700': trip.status === 'IN_PROGRESS', 'bg-green-100 text-green-700': trip.status === 'COMPLETED'}">{{ trip.status }}</span>
@@ -1359,22 +1402,19 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
         <div *ngIf="isCreateModalOpen" class="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
              <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl animate-fade-in-up my-auto max-h-[90vh] overflow-y-auto">
                  <div class="bg-indigo-600 text-white p-6 flex justify-between items-center"><h3 class="font-bold text-xl">Créer un Trajet</h3><button (click)="closeCreateModal()">✕</button></div>
-                 
                  <form [formGroup]="createForm" (ngSubmit)="submitNewTrip()" class="p-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Départ</label><input formControlName="departure" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Destination</label><input formControlName="destination" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div class="md:col-span-2"><label class="block text-sm font-bold text-gray-700 mb-1">Date</label><input type="datetime-local" formControlName="date" class="w-full border p-2 rounded bg-gray-50"></div>
                     </div>
-
                     <div class="flex gap-4 mb-4 border-b">
                         <button type="button" (click)="activeTab = 'parcels'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'parcels' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">📦 Colis</button>
                         <button type="button" (click)="activeTab = 'passengers'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'passengers' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">🙋 Passagers</button>
                     </div>
-
                     <div [class.hidden]="activeTab !== 'parcels'" class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
                        <button type="button" (click)="addParcel()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Colis</button>
-                       <div formArrayName="parcels" class="space-y-3">
+                        <div formArrayName="parcels" class="space-y-3">
                           @for (p of parcelsArray.controls; track $index) {
                              <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
                                  <button type="button" (click)="removeParcel($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
@@ -1386,7 +1426,6 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                           }
                        </div>
                     </div>
-
                     <div [class.hidden]="activeTab !== 'passengers'" class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-6">
                        <button type="button" (click)="addPassenger()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Passager</button>
                        <div formArrayName="passengers" class="space-y-3">
@@ -1401,7 +1440,6 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                           }
                        </div>
                     </div>
-
                     <div class="flex justify-end gap-3"><button type="button" (click)="closeCreateModal()" class="px-4 py-2 text-gray-600">Annuler</button><button type="submit" [disabled]="createForm.invalid" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Créer</button></div>
                  </form>
              </div>
@@ -1414,14 +1452,11 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                         <div><h3 class="font-bold text-xl">{{ trip.destination }}</h3><p class="text-gray-300 text-sm mt-1">Départ: {{ trip.departure }}</p></div>
                         <button (click)="closeDetails()" class="text-gray-400 hover:text-white text-2xl font-bold">✕</button>
                     </div>
-
                     <div class="p-6 max-h-[70vh] overflow-y-auto">
                         <div class="flex gap-3 mb-8">
                             <button *ngIf="trip.status === 'PENDING'" (click)="updateStatus('IN_PROGRESS')" class="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold">🚀 Démarrer</button>
                             <button *ngIf="trip.status === 'IN_PROGRESS'" (click)="updateStatus('COMPLETED')" class="flex-1 bg-gray-800 text-white py-3 rounded-xl font-bold">🏁 Terminer</button>
-                            
                         </div>
-
                         <div *ngIf="trip.passengers?.length" class="mb-6">
                             <h4 class="font-bold text-indigo-900 mb-3 border-b border-indigo-100 pb-2">🙋 Passagers</h4>
                             <div class="space-y-3">
@@ -1435,23 +1470,18 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                                                 <span *ngIf="pass.dropoffLocation" class="ml-2">⬇️ {{ pass.dropoffLocation }}</span>
                                             </div>
                                         </div>
-                                        <button (click)="togglePassengerDropoff(trip, $index)" 
-                                                class="w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all"
-                                                [ngClass]="pass.isDroppedOff ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-gray-300 border-gray-300'">
-                                            {{ pass.isDroppedOff ? '✓' : '' }}
-                                        </button>
+                                        <button (click)="togglePassengerDropoff(trip, $index)" class="w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all" [ngClass]="pass.isDroppedOff ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-gray-300 border-gray-300'">{{ pass.isDroppedOff ? '✓' : '' }}</button>
                                     </div>
                                 }
                             </div>
                         </div>
-
                         <h4 class="font-bold text-gray-800 mb-3 border-b pb-2">📦 Colis</h4>
                         <div class="space-y-4">
                             @for (parcel of getMergedParcels(trip); track $index) {
                                 <div class="border rounded-xl p-4 transition-colors relative" [ngClass]="parcel.delivered ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'">
                                     <span *ngIf="isExtraParcel(trip, parcel)" class="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">+ Ajouté</span>
                                     <div class="flex justify-between items-start">
-                                        <div class="flex-1">
+                                         <div class="flex-1">
                                             <div class="font-bold text-lg text-gray-800">{{ parcel.description }}</div>
                                             <div class="text-sm mt-1 text-gray-600">👤 {{ parcel.recipientName }} <br>📍 {{ parcel.recipientAddress }}</div>
                                         </div>
@@ -1459,7 +1489,7 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                                             <button (click)="toggleParcelDelivery(trip, parcel)" class="w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all border-2" [ngClass]="parcel.delivered ? 'bg-green-500 text-white border-green-600 scale-110' : 'bg-white text-gray-300 border-gray-200'">{{ parcel.delivered ? '✓' : '' }}</button>
                                         </div>
                                     </div>
-                                </div>
+                                 </div>
                             }
                             @if (getMergedParcels(trip).length === 0) { <div class="text-center py-4 text-gray-400 italic">Aucun colis.</div> }
                         </div>
@@ -1467,6 +1497,19 @@ import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
                 </div>
             </div>
         }
+
+        <div *ngIf="isChatOpen" class="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col relative">
+                 <div class="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
+                    <h3 class="font-bold text-lg flex items-center gap-2">💬 Messagerie</h3>
+                    <button (click)="isChatOpen = false" class="text-white/80 hover:text-white text-xl font-bold p-2">✕</button>
+                 </div>
+                 <div class="flex-1 overflow-hidden relative">
+                    <app-chat class="block h-full w-full"></app-chat>
+                 </div>
+             </div>
+        </div>
+
       </main>
     </div>
   `
@@ -1484,23 +1527,24 @@ export class DriverDashboardComponent {
   
   selectedTrip = signal<Trip | null>(null);
   isCreateModalOpen = false;
-  activeTab: 'parcels' | 'passengers' = 'parcels'; 
+  // 5. ETAT DU CHAT
+  isChatOpen = false;
 
-  // Véhicule du chauffeur
+  activeTab: 'parcels' | 'passengers' = 'parcels';
+  
   myCar = toSignal(combineLatest([this.user$, this.cars$]).pipe(
       map(([user, cars]) => user ? cars.find(c => c.assignedDriverId === user.uid) || null : null)
   ));
-
+  
   missions = toSignal(combineLatest([this.user$, this.cars$, this.allTrips$]).pipe(map(([user, cars, trips]) => {
         if (!user) return [];
         const myCar = cars.find(c => c.assignedDriverId === user.uid);
         if (!myCar) return [];
         return trips.filter(t => t.carId === myCar.uid);
   })), { initialValue: [] });
-
+  
   filteredMissions = computed(() => this.missions().filter(t => t.status !== 'COMPLETED'));
 
-  // FORMULAIRE
   createForm = this.fb.group({
       departure: ['', Validators.required],
       destination: ['', Validators.required],
@@ -1508,7 +1552,7 @@ export class DriverDashboardComponent {
       parcels: this.fb.array([]),
       passengers: this.fb.array([])
   });
-
+  
   get parcelsArray() { return this.createForm.get('parcels') as FormArray; }
   get passengersArray() { return this.createForm.get('passengers') as FormArray; }
 
@@ -1526,20 +1570,17 @@ export class DriverDashboardComponent {
       this.user$.pipe(switchMap(u => {
           if (!u || !car || this.createForm.invalid) return of(null);
           const val = this.createForm.value;
-          
-          // CORRECTION ICI : Ajout de 'passengers' qui manquait
           const newTrip: Trip = {
              departure: val.departure!, destination: val.destination!, date: val.date!,
              status: 'PENDING', driverId: u.uid, carId: car.uid!, company: car.company,
              parcels: val.parcels as any[] ?? [],
-             passengers: val.passengers as any[] ?? [], // <--- LIGNE AJOUTÉE POUR CORRIGER TS2741
+             passengers: val.passengers as any[] ?? [],
              extraRequests: []
           };
           return this.tripService.createTrip(newTrip);
       })).subscribe(res => { if(res) { this.closeCreateModal(); alert('Trajet créé !'); } });
   }
 
-  // LOGIQUE PASSAGER
   async togglePassengerDropoff(trip: Trip, index: number) {
      if(!trip.uid || !trip.passengers) return;
      trip.passengers[index].isDroppedOff = !trip.passengers[index].isDroppedOff;
@@ -1547,11 +1588,9 @@ export class DriverDashboardComponent {
      this.selectedTrip.set({...trip});
   }
 
-  // UTILS
   getMergedParcels(trip: Trip): Parcel[] { return trip.parcels || []; }
   isExtraParcel(trip: Trip, parcel: Parcel): boolean { return false; }
   
-  // Implémentation simplifiée pour le script (si besoin d'extra logic, réintégrer)
   async toggleParcelDelivery(trip: Trip, parcelToToggle: Parcel) {
       if (!trip.uid || !trip.parcels) return;
       const idx = trip.parcels.indexOf(parcelToToggle);
@@ -1564,17 +1603,19 @@ export class DriverDashboardComponent {
   
   viewDetails(trip: Trip) { this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); }
   closeDetails() { this.selectedTrip.set(null); }
+  
   async updateStatus(status: any) { 
      const t = this.selectedTrip();
      if(t?.uid) { await updateDoc(doc(this.firestore, 'trips', t.uid), { status }); this.closeDetails(); }
   }
+  
   getMapUrl(trip: Trip) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`; }
+  
   logout() { this.authService.logout().subscribe(); }
-  activeCount() { return 0; } // Placeholder pour éviter erreur template si pas utilisé
-  setFilter(m: any) {} // Placeholder
+  activeCount() { return 0; }
+  setFilter(m: any) {}
   filterMode = signal('ACTIVE');
 }
-
 
 
 ==============================================================================
@@ -1966,7 +2007,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
                     <div class="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold mr-3 text-lg">
-                       {{ (user.displayName || user.email).charAt(0).toUpperCase() }}
+                       {{ (user.displayName || user.email) }}
                     </div>
                     <div>
                       <div class="text-sm font-bold text-gray-900 flex items-center gap-2">

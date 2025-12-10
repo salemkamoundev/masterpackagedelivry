@@ -55,7 +55,7 @@ import { combineLatest, of } from 'rxjs';
                    <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-gray-700">📦 Colis ({{ parcelsArray.length }})</h4><button type="button" (click)="addParcel()" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">+ Ajouter</button></div>
                    <div formArrayName="parcels" class="space-y-3">
                       @for (parcel of parcelsArray.controls; track $index) {
-                         <div [formGroupName]="$index" class="bg-white p-2 rounded shadow-sm border border-gray-200 text-sm relative">
+                        <div [formGroupName]="$index" class="bg-white p-2 rounded shadow-sm border border-gray-200 text-sm relative">
                            <button type="button" (click)="removeParcel($index)" class="absolute right-1 top-1 text-red-400 font-bold text-xs">✕</button>
                            <input formControlName="description" placeholder="Objet" class="w-full mb-1 border-gray-300 rounded p-1 border">
                            <input formControlName="recipientName" placeholder="Client" class="w-full mb-1 border-gray-300 rounded p-1 border">
@@ -115,80 +115,7 @@ import { combineLatest, of } from 'rxjs';
             </table>
          </div>
       </div>
-
-    <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in-up">
-            <div class="bg-indigo-900 text-white p-4 flex justify-between items-center">
-                <h3 class="font-bold text-lg">Ajouter au Trajet</h3>
-                <button (click)="closeRequestModal()" class="text-white hover:text-gray-300">✕</button>
-            </div>
-            
-            <div class="p-6">
-                <div class="flex gap-4 mb-6 bg-gray-100 p-1 rounded-lg">
-                  <button (click)="requestType='PARCEL'" 
-                          [class]="requestType==='PARCEL' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'" 
-                          class="flex-1 py-2 rounded-md font-bold transition-all text-sm flex items-center justify-center gap-2">
-                      <span>📦</span> Colis
-                  </button>
-                  <button (click)="requestType='PASSENGER'" 
-                          [class]="requestType==='PASSENGER' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'" 
-                          class="flex-1 py-2 rounded-md font-bold transition-all text-sm flex items-center justify-center gap-2">
-                      <span>🙋</span> Passager
-                  </button>
-                </div>
-
-                <div *ngIf="requestType==='PARCEL'" class="space-y-3">
-                   <div>
-                     <label class="text-xs font-bold text-gray-500 uppercase">Description</label>
-                     <input #descInput placeholder="Ex: Documents, PC..." class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                   </div>
-                   <div class="grid grid-cols-2 gap-3">
-                     <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Destinataire</label>
-                       <input #recNameInput placeholder="Nom" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                     </div>
-                     <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Tél</label>
-                       <input #recPhoneInput placeholder="20..." class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                     </div>
-                   </div>
-                   <div>
-                     <label class="text-xs font-bold text-gray-500 uppercase">Adresse</label>
-                     <input #recAddrInput placeholder="Adresse livraison" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                   </div>
-                   <button (click)="addExtraParcel(selectedTripForRequest, descInput.value, recNameInput.value, recPhoneInput.value, recAddrInput.value)" 
-                           class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 mt-4 shadow-lg transition-transform active:scale-95">
-                       Valider l'ajout du Colis
-                   </button>
-                </div>
-
-                <div *ngIf="requestType==='PASSENGER'" class="space-y-3">
-                   <div class="grid grid-cols-2 gap-3">
-                     <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Nom</label>
-                       <input #passNameInput placeholder="Nom Prénom" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                     </div>
-                     <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Tél</label>
-                       <input #passPhoneInput placeholder="Phone" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                     </div>
-                   </div>
-                   <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Lieu de prise</label>
-                       <input #passPickInput placeholder="Départ" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                   </div>
-                   <div>
-                       <label class="text-xs font-bold text-gray-500 uppercase">Destination</label>
-                       <input #passDropInput placeholder="Arrivée" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                   </div>
-                   <button (click)="addExtraPassenger(selectedTripForRequest, passNameInput.value, passPhoneInput.value, passPickInput.value, passDropInput.value)" 
-                           class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mt-4 shadow-lg transition-transform active:scale-95">
-                       Valider l'ajout du Passager
-                   </button>
-                </div>
-            </div>
-        </div>
-    </div>
+      <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"><div class="bg-white p-6 rounded-xl"><h3 class="font-bold">Ajout Demande</h3><button (click)="closeRequestModal()">Fermer</button></div></div>
     </div>
   `
 })
@@ -215,24 +142,23 @@ export class TripManagerComponent {
   tripForm = this.fb.group({ departure: ['', Validators.required], destination: ['', Validators.required], date: ['', Validators.required], carId: ['', Validators.required], parcels: this.fb.array([]), passengers: this.fb.array([]) });
   get parcelsArray() { return this.tripForm.get('parcels') as FormArray; }
   get passengersArray() { return this.tripForm.get('passengers') as FormArray; }
-  
   addParcel() { this.parcelsArray.push(this.fb.group({ description: [''], recipientName: [''], recipientPhone: [''], recipientAddress: [''], weight: [1], delivered: [false] })); }
   addPassenger() { this.passengersArray.push(this.fb.group({ name: [''], phone: [''], pickupLocation: [''], dropoffLocation: [''], isDroppedOff: [false] })); }
   removeParcel(i: number) { this.parcelsArray.removeAt(i); }
   removePassenger(i: number) { this.passengersArray.removeAt(i); }
   toggleForm() { this.showForm = !this.showForm; }
-  
   async createTrip() { if (this.tripForm.valid) { await this.tripService.createTrip({ ...this.tripForm.value, driverId: 'PENDING', status: 'PENDING', company: this.adminCompany() === 'System' ? 'Tunisia Express' : this.adminCompany(), parcels: this.tripForm.value.parcels ?? [], passengers: this.tripForm.value.passengers ?? [], extraRequests: [] } as any); this.tripForm.reset(); this.parcelsArray.clear(); this.passengersArray.clear(); this.showForm = false; } }
   
+  // Helpers
   requestForm = this.fb.group({ type: ['PARCEL'], description: [''], parcels: this.fb.array([]) });
   openRequestModal(t: Trip) { this.selectedTripForRequest = t; }
   closeRequestModal() { this.selectedTripForRequest = null; }
-  
+  async submitRequest() {} // Implémenter logique
   async deleteTrip(t: Trip) { if (confirm('Suppr?')) await this.tripService.deleteTrip(t.uid!); }
   openChat(u: UserProfile) { this.chatService.startChatWith(u); this.router.navigate(['/admin/chat']); }
   
+  // CORRECTION : Utilisation propre de template literal pour éviter l'erreur TS1127
   handleTrackClick(t: Trip) { 
-    // CORRECTION ICI: Utilisation propre des backticks
     const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(t.departure)}&destination=${encodeURIComponent(t.destination)}&travelmode=driving`;
     window.open(url, '_blank'); 
   }
@@ -256,7 +182,6 @@ export class TripManagerComponent {
     })
   );
   private enrichedRawTrips = toSignal(this.enrichedTrips$, { initialValue: [] });
-  
   filteredTrips = computed(() => {
     const trips = this.enrichedRawTrips();
     const filters = this.filterValues();
@@ -267,55 +192,4 @@ export class TripManagerComponent {
        return (!filters?.company || t.company === filters.company) && (!filters?.inProgressOnly || t.status === 'IN_PROGRESS');
     });
   });
-
-  requestType: 'PARCEL' | 'PASSENGER' = 'PARCEL';
-
-  async addExtraParcel(trip: Trip | null, desc: string, name: string, phone: string, addr: string) {
-    if (!trip || !trip.uid) return;
-    if (!desc || !name) { alert('Veuillez remplir la description et le nom.'); return; }
-
-    const newParcel: Parcel = {
-      description: desc,
-      recipientName: name,
-      recipientPhone: phone,
-      recipientAddress: addr,
-      weight: 1,
-      delivered: false
-    };
-
-    const currentParcels = trip.parcels || [];
-    const updatedParcels = [...currentParcels, newParcel];
-
-    try {
-      await this.tripService.updateParcels(trip.uid, updatedParcels);
-      alert('📦 Colis ajouté avec succès !');
-      this.closeRequestModal();
-    } catch (e) {
-      alert('Erreur : ' + e);
-    }
-  }
-
-  async addExtraPassenger(trip: Trip | null, name: string, phone: string, pickup: string, dropoff: string) {
-    if (!trip || !trip.uid) return;
-    if (!name) { alert('Le nom est obligatoire.'); return; }
-
-    const newPassenger: Passenger = {
-      name: name,
-      phone: phone,
-      pickupLocation: pickup,
-      dropoffLocation: dropoff,
-      isDroppedOff: false
-    };
-
-    const currentPassengers = trip.passengers || [];
-    const updatedPassengers = [...currentPassengers, newPassenger];
-
-    try {
-      await this.tripService.updatePassengers(trip.uid, updatedPassengers);
-      alert('🙋 Passager ajouté avec succès !');
-      this.closeRequestModal();
-    } catch (e) {
-      alert('Erreur : ' + e);
-    }
-  }
 }
