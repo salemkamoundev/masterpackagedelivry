@@ -16,7 +16,7 @@ export class App implements OnInit {
   
 
   ngOnInit() {
-    alert("'fdsqfdsdsqdfsqds")
+    
     this.notifTokenService.requestPermission && this.notifTokenService.requestPermission("AUTO-CHECK");
     console.log('🚀 Application démarrée - Service Messaging actif');
   }

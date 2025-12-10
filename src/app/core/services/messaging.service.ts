@@ -30,14 +30,14 @@ export class MessagingService {
 
   async requestPermission(userId: string) {
     try {
-      alert('+');
+      
 
       const token = await getToken(this.messaging, {
         // ❗ ICI : on utilise la vraie VAPID key, PAS apiKey
         vapidKey: environment.firebase.vapidKey
       });
 
-      alert('+');
+      
 
       if (token) {
         console.log('🔑 Token FCM généré et reçu :', token);
