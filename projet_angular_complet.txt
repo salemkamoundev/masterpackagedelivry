@@ -887,7 +887,6 @@ export class MessagingService {
   }
 
   private init() {
-    // Écoute l'état de l'utilisateur pour ne demander le token qu'une fois connecté.
     this.authService.user$.pipe(take(1)).subscribe(user => {
       if (user) {
         console.log('👤 Utilisateur connecté. Tentative de récupération du token FCM...');
@@ -900,15 +899,17 @@ export class MessagingService {
 
   async requestPermission(userId: string) {
     try {
-      // 1. Demander la permission et obtenir le Token FCM
-      // C'est cette fonction qui nécessite la présence du service worker
+      
+
       const token = await getToken(this.messaging, {
-        vapidKey: environment.firebase.apiKey 
+        // ❗ ICI : on utilise la vraie VAPID key, PAS apiKey
+        vapidKey: environment.firebase.vapidKey
       });
+
+      
 
       if (token) {
         console.log('🔑 Token FCM généré et reçu :', token);
-        // 2. Sauvegarde dans Firestore
         await this.saveToken(userId, token);
       } else {
         console.warn('⚠️ Le navigateur a refusé la permission ou le Service Worker est inaccessible.');
@@ -921,8 +922,7 @@ export class MessagingService {
   private async saveToken(userId: string, token: string) {
     try {
       const userRef = doc(this.firestore, 'users', userId);
-      // Mise à jour du document utilisateur pour stocker le token
-      await updateDoc(userRef, { 
+      await updateDoc(userRef, {
         fcmToken: token,
         lastTokenUpdate: new Date().toISOString()
       });
@@ -1019,7 +1019,7 @@ export interface AppNotification {
 })
 export class NotificationService {
   private firestore = inject(Firestore);
-  private ngZone = inject(NgZone); // Injection de NgZone pour corriger le bug d'affichage
+  private ngZone = inject(NgZone);
 
   // Envoyer une notification
   async send(userId: string, message: string, type: 'INFO' | 'ALERT' | 'SUCCESS' = 'INFO') {
@@ -1033,9 +1033,8 @@ export class NotificationService {
     return addDoc(collection(this.firestore, 'notifications'), notif);
   }
 
-  // Écouter les notifications en temps réel (CORRIGÉ AVEC ZONE)
+  // Écouter les notifications en temps réel
   getNotifications(userId: string): Observable<AppNotification[]> {
-    alert("dfgfdsgfg")
     return new Observable((observer) => {
       const q = query(
         collection(this.firestore, 'notifications'),
@@ -1043,27 +1042,30 @@ export class NotificationService {
         where('read', '==', false)
       );
 
-      // onSnapshot écoute Firebase
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        // IMPORTANT : On force l'exécution dans la zone Angular
-        // Cela empêche le bug "Outside Injection Context" et force le rafraîchissement HTML
-        this.ngZone.run(() => {
-          const notifs = snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as AppNotification));
-          
-          // Tri par date décroissante (plus récent en haut)
-          notifs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-          
-          observer.next(notifs);
-        });
-      }, (error) => {
-        this.ngZone.run(() => observer.error(error));
-      });
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          this.ngZone.run(() => {
+            const notifs = snapshot.docs.map(
+              (d) => ({ uid: d.id, ...d.data() } as AppNotification)
+            );
+
+            // Tri par date décroissante
+            notifs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+            observer.next(notifs);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => observer.error(error));
+        }
+      );
 
       return () => unsubscribe();
     });
   }
 
-  // Marquer comme lu
+  // Marquer une notification comme lue
   async markAsRead(notifId: string) {
     const ref = doc(this.firestore, 'notifications', notifId);
     await updateDoc(ref, { read: true });
@@ -1121,6 +1123,67 @@ export class UserService {
   updateUserRole(uid: string, role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN'): Promise<void> {
     const userRef = doc(this.firestore, 'users', uid);
     return updateDoc(userRef, { role });
+  }
+}
+
+
+
+==============================================================================
+FICHIER : src/app/core/services/notification-token.service.ts
+==============================================================================
+import { Injectable, inject } from '@angular/core';
+import { Messaging, getToken } from '@angular/fire/messaging';
+import { Firestore, doc, setDoc } from '@angular/fire/firestore';
+import { AuthService } from '../auth/auth.service';
+import { environment } from '../../../environments/environment';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class NotificationTokenService {
+  private messaging = inject(Messaging);
+  private firestore = inject(Firestore);
+  private authService = inject(AuthService);
+
+  constructor() {
+    this.authService.user$.subscribe(user => {
+      if (user) {
+        console.log("👤 User connecté → récupération du token FCM…");
+        this.requestPermission(user.uid);
+      }
+    });
+  }
+
+  async requestPermission(userId: string) {
+    try {
+      const permission = await Notification.requestPermission();
+
+      if (permission !== 'granted') {
+        console.warn('❌ Permission refusée');
+        return;
+      }
+
+      const token = await getToken(this.messaging, {
+        vapidKey: environment.firebase.vapidKey
+      });
+
+      if (!token) {
+        console.warn("❌ Aucun token généré.");
+        return;
+      }
+
+      console.log("🔑 Token FCM :", token);
+
+      await setDoc(
+        doc(this.firestore, `users/${userId}`),
+        { fcmToken: token },
+        { merge: true }
+      );
+
+      console.log("📬 Token enregistré dans Firestore !");
+    } catch (e) {
+      console.error("❌ Erreur FCM :", e);
+    }
   }
 }
 
@@ -1199,8 +1262,10 @@ export const routes: Routes = [
 ==============================================================================
 FICHIER : src/app/app.ts
 ==============================================================================
-import { Component, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { NotificationTokenService } from './core/services/notification-token.service';
+import { MessagingService } from './core/services/messaging.service';
 
 @Component({
   selector: 'app-root',
@@ -1208,10 +1273,19 @@ import { RouterOutlet } from '@angular/router';
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
-export class App {
-  protected readonly title = signal('master-delivery');
-}
+export class App implements OnInit {
+  notifTokenService = inject(NotificationTokenService);
+  title = 'master-delivery';
+  private messagingService = inject(MessagingService);
+  
 
+  ngOnInit() {
+    
+    this.notifTokenService.requestPermission && this.notifTokenService.requestPermission("AUTO-CHECK");
+    console.log('🚀 Application démarrée - Service Messaging actif');
+  }
+
+}
 
 
 ==============================================================================
@@ -1677,7 +1751,7 @@ export class DriverDashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private tripService = inject(TripService);
   private carService = inject(CarService);
-  private notifService = inject(NotificationService);
+  private notifService: NotificationService = inject(NotificationService);
   private firestore = inject(Firestore);
   private fb = inject(FormBuilder);
   
@@ -2626,7 +2700,7 @@ export class TripManagerComponent {
   private companyService = inject(CompanyService);
   private userService = inject(UserService);
   private chatService = inject(ChatService);
-  private notifService = inject(NotificationService);
+  private notifService: NotificationService = inject(NotificationService);
   private router = inject(Router);
   
   showForm = false;
@@ -3115,6 +3189,7 @@ export class LiveMapComponent implements AfterViewInit, OnDestroy {
 FICHIER : src/app/app.component.ts
 ==============================================================================
 import { Component, inject, OnInit } from '@angular/core';
+import { NotificationTokenService } from "./core/services/notification-token.service";
 import { RouterOutlet } from '@angular/router';
 import { MessagingService } from './core/services/messaging.service';
 
@@ -3126,12 +3201,14 @@ import { MessagingService } from './core/services/messaging.service';
   styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit {
+  notifTokenService = inject(NotificationTokenService);
   title = 'master-delivery';
   private messagingService = inject(MessagingService);
   
-  // Injection du service pour déclencher le constructor() immédiatement
 
   ngOnInit() {
+    alert("'fdsqfds111")
+    this.notifTokenService.requestPermission && this.notifTokenService.requestPermission("AUTO-CHECK");
     console.log('🚀 Application démarrée - Service Messaging actif');
   }
 }
@@ -3264,6 +3341,7 @@ export const environment = {
     storageBucket: "masterdeliverpackage.firebasestorage.app",
     messagingSenderId: "406875058530",
     appId: "1:406875058530:web:e872e7a5eea2ccc870fc3b",
+    vapidKey: "BAsS_RO3VabSBv_oan0KgBexfBnR50zU8i0SYJgYeHPcc4KeSbT8ULdOGq81__XuabKb0IohlkxLllG1AAUfHbk",
     measurementId: "G-X9MGMQ3BVG"
   }
 };

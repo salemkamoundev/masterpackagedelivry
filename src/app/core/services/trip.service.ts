@@ -1,5 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, collection, addDoc, collectionData, doc, updateDoc, deleteDoc, arrayUnion } from '@angular/fire/firestore';
+
+
 import { Observable } from 'rxjs';
 
 export interface Passenger {
@@ -70,7 +72,7 @@ export class TripService {
     return collectionData(this.tripsCollection, { idField: 'uid' }) as Observable<Trip[]>;
   }
 
-  createTrip(trip: Trip) {
+  async createTrip(trip: Trip) {
     return addDoc(this.tripsCollection, trip);
   }
 
