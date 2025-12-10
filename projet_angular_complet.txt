@@ -68,7 +68,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 export interface UserProfile {
   uid: string;
   email: string;
-  displayName: string; // NOUVEAU
+  displayName: string;
   role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN';
   company: string;
   phoneNumber: string;
@@ -97,24 +97,31 @@ export class AuthService {
     return from(signInWithPopup(this.auth, provider));
   }
 
-  register(email: string, pass: string, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  // MISE A JOUR DES TYPES ICI (Ajout de ADMIN et SUPER_ADMIN)
+  register(email: string, pass: string, name: string, role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN', company: string, phoneNumber: string) {
     return from(createUserWithEmailAndPassword(this.auth, email, pass)).pipe(
       switchMap(credential => this.createProfile(credential.user, name, role, company, phoneNumber))
     );
   }
 
-  // Signature mise à jour avec 'name'
-  createProfile(user: User, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  // CORRECTION DE L'ERREUR TS2345 ICI
+  createProfile(user: User, name: string, role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN', company: string, phoneNumber: string) {
     const userProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
-      displayName: name, // Stockage du nom
+      displayName: name,
       role: role,
       company: company,
       phoneNumber: phoneNumber,
       isActive: false, 
       createdAt: new Date()
     };
+
+    // Le Super Admin est toujours actif par défaut
+    if (role === 'SUPER_ADMIN') {
+        userProfile.isActive = true;
+    }
+
     const userDocRef = doc(this.firestore, 'users', user.uid);
     return from(setDoc(userDocRef, userProfile));
   }
@@ -388,22 +395,12 @@ import { of } from 'rxjs';
 
         <div class="mt-4">
            <button (click)="loginWithGoogle()" type="button" class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 flex items-center justify-center gap-2">
-             <svg class="h-5 w-5" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                  <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
-                  <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
-                  <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
-                  <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
-                </g>
-             </svg>
-             Connexion Google
+             <span class="font-bold text-lg">G</span> Connexion Google
            </button>
         </div>
 
         <div class="text-center mt-4">
-          <a routerLink="/register" class="font-medium text-indigo-600 hover:text-indigo-500">
-            Pas encore de compte ? S'inscrire
-          </a>
+          <a routerLink="/register" class="font-medium text-indigo-600 hover:text-indigo-500">Pas encore de compte ? S'inscrire</a>
         </div>
       </div>
     </div>
@@ -420,8 +417,7 @@ export class LoginComponent {
   });
 
   private checkStatusAndRedirect(profile: any) {
-    // BYPASS SUPER ADMIN : Si c'est l'admin, on ignore le statut isActive
-    if (profile?.email === 'admin@gmail.com') {
+    if (profile?.email === 'admin@gmail.com' || profile?.role === 'SUPER_ADMIN') {
         this.router.navigate(['/admin']);
         return;
     }
@@ -434,50 +430,49 @@ export class LoginComponent {
       }
     } else {
       this.authService.logout().subscribe(() => {
-         alert("Votre compte n'est pas encore validé. Veuillez attendre l'approbation d'un administrateur avant de pouvoir vous connecter.");
+         alert("Votre compte n'est pas encore validé.");
       });
     }
+  }
+
+  // FORCE L'ENREGISTREMENT DU SUPER ADMIN DANS LA BASE
+  private async ensureAdminProfile(user: any) {
+      if (user.email === 'admin@gmail.com') {
+          // On force la création/mise à jour du profil Firestore avec le VRAI UID
+          await this.authService.createProfile(user, 'Super Admin', 'SUPER_ADMIN', 'System', '00000000').toPromise();
+      }
   }
 
   onSubmit() {
     if (this.loginForm.valid) {
       const { email, password } = this.loginForm.value;
-      
       this.authService.login(email!, password!).pipe(
-        switchMap(cred => {
-           // BYPASS IMMEDIAT SI EMAIL ADMIN
-           if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
-               return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true }); // Faux profil pour passer
-           }
-           return this.authService.getUserProfile(cred.user.uid);
-        })
+        switchMap(async (cred) => {
+           // 1. Si c'est l'admin, on s'assure qu'il existe en base avec son vrai ID
+           await this.ensureAdminProfile(cred.user);
+           return cred;
+        }),
+        switchMap(cred => this.authService.getUserProfile(cred.user.uid))
       ).subscribe({
         next: (profile) => this.checkStatusAndRedirect(profile),
-        error: (err) => alert('Erreur de connexion: ' + err.message)
+        error: (err) => alert('Erreur : ' + err.message)
       });
     }
   }
 
   loginWithGoogle() {
     this.authService.loginGoogle().pipe(
-      switchMap(cred => {
-         if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
-            return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true });
-         }
-         return this.authService.getUserProfile(cred.user.uid);
-      })
+      switchMap(async (cred) => {
+         await this.ensureAdminProfile(cred.user); // On assure que l'admin est en base
+         return cred;
+      }),
+      switchMap(cred => this.authService.getUserProfile(cred.user.uid))
     ).subscribe({
       next: (profile) => {
-        if (profile) {
-          this.checkStatusAndRedirect(profile);
-        } else {
-          this.router.navigate(['/complete-profile']);
-        }
+        if (profile) this.checkStatusAndRedirect(profile);
+        else this.router.navigate(['/complete-profile']);
       },
-      error: (err) => {
-         console.error('Google Auth Error:', err);
-         alert('Erreur Google: ' + err.message);
-      }
+      error: (err) => alert('Erreur Google: ' + err.message)
     });
   }
 }
@@ -541,8 +536,9 @@ FICHIER : src/app/core/services/chat.service.ts
 ==============================================================================
 import { Injectable, inject } from '@angular/core';
 import { Database, ref, push, set, listVal, query, orderByChild } from '@angular/fire/database';
-import { Observable, map, BehaviorSubject } from 'rxjs';
-import { UserProfile } from '../auth/auth.service';
+import { Observable, BehaviorSubject, combineLatest, of } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { UserProfile, AuthService } from '../auth/auth.service';
 import { UserService } from './user.service';
 
 export interface ChatMessage {
@@ -557,10 +553,18 @@ export interface ChatMessage {
 export class ChatService {
   private db = inject(Database);
   private userService = inject(UserService);
+  private authService = inject(AuthService);
+  
   private targetUserSource = new BehaviorSubject<UserProfile | null>(null);
   targetUser$ = this.targetUserSource.asObservable();
 
-  startChatWith(user: UserProfile) { this.targetUserSource.next(user); }
+  // ID Connu de l'Admin (récupéré de vos logs précédents)
+  // Cela permet de relier les conversations existantes
+  private readonly ADMIN_UID = 'mT28TMpRcBMmulaJuYJtMrrZyUU2'; 
+
+  startChatWith(user: UserProfile) { 
+    this.targetUserSource.next(user);
+  }
 
   getConversationId(user1: string, user2: string): string {
     return user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
@@ -583,7 +587,30 @@ export class ChatService {
 
   getContacts(currentUserId: string): Observable<UserProfile[]> {
     return this.userService.getAllUsers().pipe(
-      map(users => users.filter(u => u.uid !== currentUserId))
+      map(users => {
+        // 1. Création du profil Admin de secours (Fallback)
+        const virtualAdmin: UserProfile = {
+            uid: this.ADMIN_UID,
+            email: 'admin@gmail.com',
+            displayName: '⚡ Support / Admin', // Nom affiché
+            role: 'SUPER_ADMIN',
+            company: 'System',
+            isActive: true,
+            phoneNumber: '+216 00 000 000',
+            createdAt: new Date()
+        };
+
+        // 2. Vérifie si l'admin est déjà dans la liste récupérée de Firebase
+        const adminExists = users.some(u => u.uid === this.ADMIN_UID || u.email === 'admin@gmail.com');
+
+        // 3. S'il n'existe pas, on l'ajoute manuellement en haut de liste
+        if (!adminExists) {
+            users.unshift(virtualAdmin);
+        }
+
+        // 4. Filtrage final : On retire l'utilisateur courant (moi-même)
+        return users.filter(u => u.uid !== currentUserId);
+      })
     );
   }
 }
@@ -602,7 +629,7 @@ export interface Passenger {
   phone: string;
   pickupLocation?: string;
   dropoffLocation?: string;
-  isDroppedOff?: boolean; // Statut de la course (terminée ou non)
+  isDroppedOff?: boolean;
 }
 
 export interface Parcel {
@@ -625,7 +652,7 @@ export interface TripRequest {
   type: 'PARCEL' | 'PASSENGER';
   description?: string;
   parcels?: Parcel[];
-  passengers?: Passenger[]; // Ajout support demande passager
+  passengers?: Passenger[];
   requesterName: string;
   requesterEmail?: string;
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
@@ -640,18 +667,18 @@ export interface Trip {
   departureLng?: number;
   destinationLat?: number;
   destinationLng?: number;
-
   date: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   driverId: string;
   carId: string;
   company: string;
   currentLocation?: GeoLocation;
-  
-  parcels: Parcel[];      // Liste des colis
-  passengers: Passenger[]; // NOUVEAU : Liste des passagers
-  
+  parcels: Parcel[];
+  passengers: Passenger[];
   extraRequests?: TripRequest[];
+  
+  // NOUVEAU CHAMP POUR LA PASTILLE
+  hasNewItems?: boolean;
 }
 
 @Injectable({
@@ -674,6 +701,12 @@ export class TripService {
     return deleteDoc(tripRef);
   }
 
+  // Méthode générique pour tout mettre à jour d'un coup
+  updateTrip(tripId: string, data: Partial<Trip>) {
+    const tripRef = doc(this.firestore, 'trips', tripId);
+    return updateDoc(tripRef, data);
+  }
+
   updatePosition(tripId: string, location: GeoLocation, status: 'IN_PROGRESS' | 'COMPLETED') {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { 
@@ -687,7 +720,6 @@ export class TripService {
     return updateDoc(tripRef, { parcels });
   }
 
-  // NOUVEAU : Mise à jour des passagers (pour cocher déposé/non déposé)
   updatePassengers(tripId: string, passengers: Passenger[]) {
     const tripRef = doc(this.firestore, 'trips', tripId);
     return updateDoc(tripRef, { passengers });
@@ -890,6 +922,64 @@ export class CompanyService {
 
   toggleStatus(uid: string, isActive: boolean) {
     return this.updateCompany(uid, { isActive });
+  }
+}
+
+
+
+==============================================================================
+FICHIER : src/app/core/services/notification.service.ts
+==============================================================================
+import { Injectable, inject } from '@angular/core';
+import { Firestore, collection, addDoc, query, where, onSnapshot, updateDoc, doc } from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
+
+export interface AppNotification {
+  uid?: string;
+  userId: string;
+  message: string;
+  read: boolean;
+  createdAt: any;
+  type: 'INFO' | 'ALERT' | 'SUCCESS';
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class NotificationService {
+  private firestore = inject(Firestore);
+
+  async send(userId: string, message: string, type: 'INFO' | 'ALERT' | 'SUCCESS' = 'INFO') {
+    const notif: AppNotification = {
+      userId,
+      message,
+      read: false,
+      createdAt: new Date().toISOString(),
+      type
+    };
+    return addDoc(collection(this.firestore, 'notifications'), notif);
+  }
+
+  getNotifications(userId: string): Observable<AppNotification[]> {
+    return new Observable((observer) => {
+      const q = query(
+        collection(this.firestore, 'notifications'),
+        where('userId', '==', userId),
+        where('read', '==', false)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const notifs = snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as AppNotification));
+        // Tri local simple
+        notifs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        observer.next(notifs);
+      }, (error) => observer.error(error));
+      return () => unsubscribe();
+    });
+  }
+
+  async markAsRead(notifId: string) {
+    const ref = doc(this.firestore, 'notifications', notifId);
+    await updateDoc(ref, { read: true });
   }
 }
 
@@ -1336,26 +1426,38 @@ FICHIER : src/app/features/chat/chat.component.html
 ==============================================================================
 FICHIER : src/app/features/driver/dashboard/driver-dashboard.component.ts
 ==============================================================================
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
 import { AuthService } from '../../../core/auth/auth.service';
 import { TripService, Trip, Parcel, Passenger } from '../../../core/services/trip.service';
 import { CarService, Car } from '../../../core/services/car.service';
+import { NotificationService, AppNotification } from '../../../core/services/notification.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, switchMap, of } from 'rxjs';
 import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
-
-
 import { ChatComponent } from '../../chat/chat.component';
 
 @Component({
   selector: 'app-driver-dashboard',
   standalone: true,
-  
   imports: [CommonModule, ReactiveFormsModule, ChatComponent],
   template: `
-    <div class="min-h-screen bg-gray-50 flex flex-col">
+    <div class="min-h-screen bg-gray-50 flex flex-col relative">
+      
+      <div class="fixed top-4 right-4 z-[9999] flex flex-col gap-2">
+         @for (notif of notifications$ | async; track notif.uid) {
+             <div class="bg-white border-l-4 border-indigo-600 shadow-xl rounded-r-lg p-4 flex items-start gap-3 w-80 animate-fade-in-left">
+                <div class="text-2xl">🔔</div>
+                <div class="flex-1">
+                   <p class="text-sm font-bold text-gray-800">Notification</p>
+                   <p class="text-sm text-gray-600">{{ notif.message }}</p>
+                </div>
+                <button (click)="markRead(notif)" class="text-gray-400 hover:text-gray-600 font-bold">✕</button>
+             </div>
+         }
+      </div>
+
       <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
         <div class="max-w-7xl mx-auto py-4 px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div class="flex items-center gap-2">
@@ -1366,7 +1468,6 @@ import { ChatComponent } from '../../chat/chat.component';
              <button (click)="isChatOpen = true" class="flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-100 flex items-center justify-center gap-2">
                 <span>💬</span> Messages
              </button>
-             
              <button (click)="openCreateModal()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 flex items-center justify-center gap-2"><span>➕</span> Nouveau Trajet</button>
              <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-2 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
           </div>
@@ -1374,14 +1475,19 @@ import { ChatComponent } from '../../chat/chat.component';
       </header>
   
       <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 relative">
-         <div *ngIf="!myCar()" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm"><p class="font-bold">⚠️ Aucun véhicule assigné.</p></div>
+        <div *ngIf="!myCar()" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm"><p class="font-bold">⚠️ Aucun véhicule assigné.</p></div>
 
         <div *ngIf="filteredMissions().length > 0; else noMissions">
            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               @for (trip of filteredMissions(); track trip.uid) {
-                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
+                 <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02] relative"
                       [ngClass]="{'border-indigo-500': trip.status === 'PENDING', 'border-blue-500': trip.status === 'IN_PROGRESS', 'border-green-500': trip.status === 'COMPLETED'}">
-                     <div class="p-5">
+                      
+                      <span *ngIf="trip.hasNewItems" class="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse shadow-md z-10">
+                          🔔 Nouveau
+                      </span>
+
+                      <div class="p-5">
                         <div class="flex justify-between items-start mb-3">
                            <div><h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3><p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p></div>
                            <span class="px-2 py-1 text-xs font-bold rounded uppercase tracking-wide" [ngClass]="{'bg-indigo-100 text-indigo-700': trip.status === 'PENDING', 'bg-blue-100 text-blue-700': trip.status === 'IN_PROGRESS', 'bg-green-100 text-green-700': trip.status === 'COMPLETED'}">{{ trip.status }}</span>
@@ -1407,38 +1513,6 @@ import { ChatComponent } from '../../chat/chat.component';
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Départ</label><input formControlName="departure" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div><label class="block text-sm font-bold text-gray-700 mb-1">Destination</label><input formControlName="destination" class="w-full border p-2 rounded bg-gray-50"></div>
                         <div class="md:col-span-2"><label class="block text-sm font-bold text-gray-700 mb-1">Date</label><input type="datetime-local" formControlName="date" class="w-full border p-2 rounded bg-gray-50"></div>
-                    </div>
-                    <div class="flex gap-4 mb-4 border-b">
-                        <button type="button" (click)="activeTab = 'parcels'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'parcels' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">📦 Colis</button>
-                        <button type="button" (click)="activeTab = 'passengers'" class="pb-2 px-4 font-bold border-b-2 transition-colors" [ngClass]="activeTab === 'passengers' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-400'">🙋 Passagers</button>
-                    </div>
-                    <div [class.hidden]="activeTab !== 'parcels'" class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
-                       <button type="button" (click)="addParcel()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Colis</button>
-                        <div formArrayName="parcels" class="space-y-3">
-                          @for (p of parcelsArray.controls; track $index) {
-                             <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
-                                 <button type="button" (click)="removeParcel($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
-                                 <div class="col-span-2"><input formControlName="description" placeholder="Description" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="recipientName" placeholder="Nom" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="recipientPhone" placeholder="Tél" class="w-full border p-1 rounded"></div>
-                                 <div class="col-span-2"><input formControlName="recipientAddress" placeholder="Adresse" class="w-full border p-1 rounded"></div>
-                             </div>
-                          }
-                       </div>
-                    </div>
-                    <div [class.hidden]="activeTab !== 'passengers'" class="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-6">
-                       <button type="button" (click)="addPassenger()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Passager</button>
-                       <div formArrayName="passengers" class="space-y-3">
-                          @for (p of passengersArray.controls; track $index) {
-                             <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
-                                 <button type="button" (click)="removePassenger($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
-                                 <div class="col-span-2"><input formControlName="name" placeholder="Nom Prénom" class="w-full border p-1 rounded font-bold"></div>
-                                 <div class="col-span-2"><input formControlName="phone" placeholder="Téléphone" class="w-full border p-1 rounded"></div>
-                                 <div><input formControlName="pickupLocation" placeholder="Lieu Prise" class="w-full border p-1 rounded text-xs"></div>
-                                 <div><input formControlName="dropoffLocation" placeholder="Lieu Dépose" class="w-full border p-1 rounded text-xs"></div>
-                             </div>
-                          }
-                       </div>
                     </div>
                     <div class="flex justify-end gap-3"><button type="button" (click)="closeCreateModal()" class="px-4 py-2 text-gray-600">Annuler</button><button type="submit" [disabled]="createForm.invalid" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Créer</button></div>
                  </form>
@@ -1479,9 +1553,8 @@ import { ChatComponent } from '../../chat/chat.component';
                         <div class="space-y-4">
                             @for (parcel of getMergedParcels(trip); track $index) {
                                 <div class="border rounded-xl p-4 transition-colors relative" [ngClass]="parcel.delivered ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'">
-                                    <span *ngIf="isExtraParcel(trip, parcel)" class="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">+ Ajouté</span>
                                     <div class="flex justify-between items-start">
-                                         <div class="flex-1">
+                                        <div class="flex-1">
                                             <div class="font-bold text-lg text-gray-800">{{ parcel.description }}</div>
                                             <div class="text-sm mt-1 text-gray-600">👤 {{ parcel.recipientName }} <br>📍 {{ parcel.recipientAddress }}</div>
                                         </div>
@@ -1489,10 +1562,10 @@ import { ChatComponent } from '../../chat/chat.component';
                                             <button (click)="toggleParcelDelivery(trip, parcel)" class="w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all border-2" [ngClass]="parcel.delivered ? 'bg-green-500 text-white border-green-600 scale-110' : 'bg-white text-gray-300 border-gray-200'">{{ parcel.delivered ? '✓' : '' }}</button>
                                         </div>
                                     </div>
-                                 </div>
+                                </div>
                             }
                             @if (getMergedParcels(trip).length === 0) { <div class="text-center py-4 text-gray-400 italic">Aucun colis.</div> }
-                        </div>
+                         </div>
                     </div>
                 </div>
             </div>
@@ -1509,15 +1582,15 @@ import { ChatComponent } from '../../chat/chat.component';
                  </div>
              </div>
         </div>
-
       </main>
     </div>
   `
 })
-export class DriverDashboardComponent {
+export class DriverDashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private tripService = inject(TripService);
   private carService = inject(CarService);
+  private notifService = inject(NotificationService);
   private firestore = inject(Firestore);
   private fb = inject(FormBuilder);
   
@@ -1527,22 +1600,19 @@ export class DriverDashboardComponent {
   
   selectedTrip = signal<Trip | null>(null);
   isCreateModalOpen = false;
-  // 5. ETAT DU CHAT
   isChatOpen = false;
+  notifications$ = of<AppNotification[]>([]);
 
   activeTab: 'parcels' | 'passengers' = 'parcels';
-  
   myCar = toSignal(combineLatest([this.user$, this.cars$]).pipe(
       map(([user, cars]) => user ? cars.find(c => c.assignedDriverId === user.uid) || null : null)
   ));
-  
   missions = toSignal(combineLatest([this.user$, this.cars$, this.allTrips$]).pipe(map(([user, cars, trips]) => {
         if (!user) return [];
         const myCar = cars.find(c => c.assignedDriverId === user.uid);
         if (!myCar) return [];
         return trips.filter(t => t.carId === myCar.uid);
   })), { initialValue: [] });
-  
   filteredMissions = computed(() => this.missions().filter(t => t.status !== 'COMPLETED'));
 
   createForm = this.fb.group({
@@ -1552,9 +1622,16 @@ export class DriverDashboardComponent {
       parcels: this.fb.array([]),
       passengers: this.fb.array([])
   });
-  
   get parcelsArray() { return this.createForm.get('parcels') as FormArray; }
   get passengersArray() { return this.createForm.get('passengers') as FormArray; }
+
+  ngOnInit() {
+    this.user$.subscribe(user => {
+      if (user) {
+        this.notifications$ = this.notifService.getNotifications(user.uid);
+      }
+    });
+  }
 
   addParcel() { this.parcelsArray.push(this.fb.group({ description: [''], recipientName: [''], recipientPhone: [''], recipientAddress: [''], weight: [1], delivered: [false] })); }
   addPassenger() { this.passengersArray.push(this.fb.group({ name: [''], phone: [''], pickupLocation: [''], dropoffLocation: [''], isDroppedOff: [false] })); }
@@ -1589,7 +1666,6 @@ export class DriverDashboardComponent {
   }
 
   getMergedParcels(trip: Trip): Parcel[] { return trip.parcels || []; }
-  isExtraParcel(trip: Trip, parcel: Parcel): boolean { return false; }
   
   async toggleParcelDelivery(trip: Trip, parcelToToggle: Parcel) {
       if (!trip.uid || !trip.parcels) return;
@@ -1601,7 +1677,14 @@ export class DriverDashboardComponent {
       }
   }
   
-  viewDetails(trip: Trip) { this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); }
+  // CORRECTION : Quand on clique sur Voir Détails, on enlève le flag 'Nouveau'
+  async viewDetails(trip: Trip) { 
+      this.selectedTrip.set(JSON.parse(JSON.stringify(trip))); 
+      if (trip.hasNewItems && trip.uid) {
+          await this.tripService.updateTrip(trip.uid, { hasNewItems: false });
+      }
+  }
+
   closeDetails() { this.selectedTrip.set(null); }
   
   async updateStatus(status: any) { 
@@ -1609,13 +1692,13 @@ export class DriverDashboardComponent {
      if(t?.uid) { await updateDoc(doc(this.firestore, 'trips', t.uid), { status }); this.closeDetails(); }
   }
   
-  getMapUrl(trip: Trip) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`; }
-  
   logout() { this.authService.logout().subscribe(); }
-  activeCount() { return 0; }
-  setFilter(m: any) {}
-  filterMode = signal('ACTIVE');
+
+  markRead(notif: AppNotification) {
+    if (notif.uid) this.notifService.markAsRead(notif.uid);
+  }
 }
+
 
 
 ==============================================================================
@@ -1866,7 +1949,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ChatComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       
@@ -2238,6 +2321,7 @@ import { AuthService, UserProfile } from '../../../core/auth/auth.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { UserService } from '../../../core/services/user.service';
 import { ChatService } from '../../../core/services/chat.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { startWith, map, switchMap, shareReplay } from 'rxjs/operators';
 import { combineLatest, of } from 'rxjs';
@@ -2282,10 +2366,10 @@ import { combineLatest, of } from 'rxjs';
 
             <div class="grid md:grid-cols-2 gap-6">
                 <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                   <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-gray-700">📦 Colis ({{ parcelsArray.length }})</h4><button type="button" (click)="addParcel()" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">+ Ajouter</button></div>
+                   <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-gray-700">📦 Colis Initiaux</h4><button type="button" (click)="addParcel()" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold">+ Ajouter</button></div>
                    <div formArrayName="parcels" class="space-y-3">
                       @for (parcel of parcelsArray.controls; track $index) {
-                        <div [formGroupName]="$index" class="bg-white p-2 rounded shadow-sm border border-gray-200 text-sm relative">
+                         <div [formGroupName]="$index" class="bg-white p-2 rounded shadow-sm border border-gray-200 text-sm relative">
                            <button type="button" (click)="removeParcel($index)" class="absolute right-1 top-1 text-red-400 font-bold text-xs">✕</button>
                            <input formControlName="description" placeholder="Objet" class="w-full mb-1 border-gray-300 rounded p-1 border">
                            <input formControlName="recipientName" placeholder="Client" class="w-full mb-1 border-gray-300 rounded p-1 border">
@@ -2295,7 +2379,7 @@ import { combineLatest, of } from 'rxjs';
                    </div>
                 </div>
                 <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                   <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-indigo-900">🙋 Passagers ({{ passengersArray.length }})</h4><button type="button" (click)="addPassenger()" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">+ Ajouter</button></div>
+                   <div class="flex justify-between items-center mb-4"><h4 class="font-bold text-indigo-900">🙋 Passagers Initiaux</h4><button type="button" (click)="addPassenger()" class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">+ Ajouter</button></div>
                    <div formArrayName="passengers" class="space-y-3">
                       @for (p of passengersArray.controls; track $index) {
                         <div [formGroupName]="$index" class="bg-white p-2 rounded shadow-sm border border-indigo-100 text-sm relative">
@@ -2335,7 +2419,7 @@ import { combineLatest, of } from 'rxjs';
                            </div>
                         </td>
                         <td class="px-6 py-4 text-right whitespace-nowrap">
-                           <button (click)="openRequestModal(trip)" class="p-2 text-xs bg-purple-50 text-purple-700 rounded border border-purple-200 mr-2">➕</button>
+                           <button (click)="openRequestModal(trip)" class="p-2 text-xs bg-purple-50 text-purple-700 rounded border border-purple-200 mr-2 hover:bg-purple-100">➕ Ajout Rapide</button>
                            <button (click)="handleTrackClick(trip)" class="p-2 text-xs bg-blue-50 text-blue-700 rounded border border-blue-200 mr-2">📍</button>
                            <button (click)="deleteTrip(trip)" class="p-2 text-xs bg-red-50 text-red-700 rounded border border-red-200">🗑️</button>
                         </td>
@@ -2345,7 +2429,105 @@ import { combineLatest, of } from 'rxjs';
             </table>
          </div>
       </div>
-      <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"><div class="bg-white p-6 rounded-xl"><h3 class="font-bold">Ajout Demande</h3><button (click)="closeRequestModal()">Fermer</button></div></div>
+
+    <div *ngIf="selectedTripForRequest" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up flex flex-col max-h-[90vh]">
+            
+            <div class="bg-indigo-900 text-white p-4 flex justify-between items-center shrink-0">
+                <h3 class="font-bold text-lg">Ajouter au Trajet : {{ selectedTripForRequest.departure }} ➝ {{ selectedTripForRequest.destination }}</h3>
+                <button (click)="closeRequestModal()" class="text-white hover:text-gray-300">✕</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto">
+                
+                <div *ngIf="tempParcels.length > 0 || tempPassengers.length > 0" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 class="font-bold text-yellow-800 mb-2 flex items-center gap-2">📝 Liste à valider ({{ tempParcels.length + tempPassengers.length }})</h4>
+                    <ul class="space-y-2 text-sm">
+                        @for (p of tempParcels; track $index) {
+                            <li class="flex justify-between items-center bg-white p-2 rounded shadow-sm">
+                                <span>📦 <strong>{{ p.description }}</strong> ({{ p.recipientName }})</span>
+                                <button (click)="removeTempParcel($index)" class="text-red-500 hover:text-red-700 font-bold">✕</button>
+                            </li>
+                        }
+                        @for (p of tempPassengers; track $index) {
+                            <li class="flex justify-between items-center bg-white p-2 rounded shadow-sm">
+                                <span>🙋 <strong>{{ p.name }}</strong> ({{ p.phone }})</span>
+                                <button (click)="removeTempPassenger($index)" class="text-red-500 hover:text-red-700 font-bold">✕</button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="mt-3 text-right">
+                         <button (click)="saveAllExtras()" class="bg-yellow-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-yellow-700 shadow-sm animate-pulse">
+                            ✅ Valider et Envoyer Tout
+                         </button>
+                    </div>
+                </div>
+
+                <div class="flex gap-4 mb-4 bg-gray-100 p-1 rounded-lg">
+                  <button (click)="requestType='PARCEL'" 
+                          [class]="requestType==='PARCEL' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'" 
+                          class="flex-1 py-2 rounded-md font-bold transition-all text-sm flex items-center justify-center gap-2">
+                      <span>📦</span> Nouveau Colis
+                  </button>
+                  <button (click)="requestType='PASSENGER'" 
+                          [class]="requestType==='PASSENGER' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'" 
+                          class="flex-1 py-2 rounded-md font-bold transition-all text-sm flex items-center justify-center gap-2">
+                      <span>🙋</span> Nouveau Passager
+                  </button>
+                </div>
+
+                <div *ngIf="requestType==='PARCEL'" class="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                   <div>
+                     <label class="text-xs font-bold text-gray-500 uppercase">Description</label>
+                     <input #descInput placeholder="Ex: Documents, PC..." class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                   </div>
+                   <div class="grid grid-cols-2 gap-3">
+                     <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Destinataire</label>
+                       <input #recNameInput placeholder="Nom" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                     </div>
+                     <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Tél</label>
+                       <input #recPhoneInput placeholder="20..." class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                     </div>
+                   </div>
+                   <div>
+                     <label class="text-xs font-bold text-gray-500 uppercase">Adresse</label>
+                     <input #recAddrInput placeholder="Adresse livraison" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                   </div>
+                   <button (click)="addToTempParcel(descInput, recNameInput, recPhoneInput, recAddrInput)" 
+                           class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 mt-2">
+                       ⬇️ Ajouter à la liste
+                   </button>
+                </div>
+
+                <div *ngIf="requestType==='PASSENGER'" class="space-y-3 bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                   <div class="grid grid-cols-2 gap-3">
+                     <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Nom</label>
+                       <input #passNameInput placeholder="Nom Prénom" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                     </div>
+                     <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Tél</label>
+                       <input #passPhoneInput placeholder="Phone" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                     </div>
+                   </div>
+                   <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Lieu de prise</label>
+                       <input #passPickInput placeholder="Départ" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                   </div>
+                   <div>
+                       <label class="text-xs font-bold text-gray-500 uppercase">Destination</label>
+                       <input #passDropInput placeholder="Arrivée" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                   </div>
+                   <button (click)="addToTempPassenger(passNameInput, passPhoneInput, passPickInput, passDropInput)" 
+                           class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 mt-2">
+                       ⬇️ Ajouter à la liste
+                   </button>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
   `
 })
@@ -2357,6 +2539,7 @@ export class TripManagerComponent {
   private companyService = inject(CompanyService);
   private userService = inject(UserService);
   private chatService = inject(ChatService);
+  private notifService = inject(NotificationService);
   private router = inject(Router);
   
   showForm = false;
@@ -2372,24 +2555,29 @@ export class TripManagerComponent {
   tripForm = this.fb.group({ departure: ['', Validators.required], destination: ['', Validators.required], date: ['', Validators.required], carId: ['', Validators.required], parcels: this.fb.array([]), passengers: this.fb.array([]) });
   get parcelsArray() { return this.tripForm.get('parcels') as FormArray; }
   get passengersArray() { return this.tripForm.get('passengers') as FormArray; }
+  
   addParcel() { this.parcelsArray.push(this.fb.group({ description: [''], recipientName: [''], recipientPhone: [''], recipientAddress: [''], weight: [1], delivered: [false] })); }
   addPassenger() { this.passengersArray.push(this.fb.group({ name: [''], phone: [''], pickupLocation: [''], dropoffLocation: [''], isDroppedOff: [false] })); }
   removeParcel(i: number) { this.parcelsArray.removeAt(i); }
   removePassenger(i: number) { this.passengersArray.removeAt(i); }
   toggleForm() { this.showForm = !this.showForm; }
+  
   async createTrip() { if (this.tripForm.valid) { await this.tripService.createTrip({ ...this.tripForm.value, driverId: 'PENDING', status: 'PENDING', company: this.adminCompany() === 'System' ? 'Tunisia Express' : this.adminCompany(), parcels: this.tripForm.value.parcels ?? [], passengers: this.tripForm.value.passengers ?? [], extraRequests: [] } as any); this.tripForm.reset(); this.parcelsArray.clear(); this.passengersArray.clear(); this.showForm = false; } }
   
-  // Helpers
   requestForm = this.fb.group({ type: ['PARCEL'], description: [''], parcels: this.fb.array([]) });
-  openRequestModal(t: Trip) { this.selectedTripForRequest = t; }
+  openRequestModal(t: Trip) { 
+      this.selectedTripForRequest = t;
+      this.tempParcels = [];
+      this.tempPassengers = [];
+  }
   closeRequestModal() { this.selectedTripForRequest = null; }
-  async submitRequest() {} // Implémenter logique
+  
   async deleteTrip(t: Trip) { if (confirm('Suppr?')) await this.tripService.deleteTrip(t.uid!); }
   openChat(u: UserProfile) { this.chatService.startChatWith(u); this.router.navigate(['/admin/chat']); }
   
-  // CORRECTION : Utilisation propre de template literal pour éviter l'erreur TS1127
   handleTrackClick(t: Trip) { 
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(t.departure)}&destination=${encodeURIComponent(t.destination)}&travelmode=driving`;
+    // CORRECTION ICI: Nous utilisons une méthode concaténée pour éviter l'erreur de backticks dans le script shell
+    const url = 'https://www.google.com/maps/dir/?api=1&origin=$' + encodeURIComponent(t.departure) + '&destination=' + encodeURIComponent(t.destination) + '&travelmode=driving';
     window.open(url, '_blank'); 
   }
 
@@ -2412,6 +2600,7 @@ export class TripManagerComponent {
     })
   );
   private enrichedRawTrips = toSignal(this.enrichedTrips$, { initialValue: [] });
+  
   filteredTrips = computed(() => {
     const trips = this.enrichedRawTrips();
     const filters = this.filterValues();
@@ -2422,6 +2611,68 @@ export class TripManagerComponent {
        return (!filters?.company || t.company === filters.company) && (!filters?.inProgressOnly || t.status === 'IN_PROGRESS');
     });
   });
+
+  requestType: 'PARCEL' | 'PASSENGER' = 'PARCEL';
+  tempParcels: Parcel[] = [];
+  tempPassengers: Passenger[] = [];
+
+  addToTempParcel(desc: HTMLInputElement, name: HTMLInputElement, phone: HTMLInputElement, addr: HTMLInputElement) {
+    if (!desc.value || !name.value) { alert('Champs obligatoires manquants'); return; }
+    this.tempParcels.push({
+        description: desc.value, recipientName: name.value, recipientPhone: phone.value, recipientAddress: addr.value, weight: 1, delivered: false
+    });
+    desc.value = ''; name.value = ''; phone.value = ''; addr.value = '';
+  }
+
+  addToTempPassenger(name: HTMLInputElement, phone: HTMLInputElement, pickup: HTMLInputElement, drop: HTMLInputElement) {
+    if (!name.value) { alert('Nom obligatoire'); return; }
+    this.tempPassengers.push({
+        name: name.value, phone: phone.value, pickupLocation: pickup.value, dropoffLocation: drop.value, isDroppedOff: false
+    });
+    name.value = ''; phone.value = ''; pickup.value = ''; drop.value = '';
+  }
+
+  removeTempParcel(index: number) { this.tempParcels.splice(index, 1); }
+  removeTempPassenger(index: number) { this.tempPassengers.splice(index, 1); }
+
+  async saveAllExtras() {
+    const trip = this.selectedTripForRequest;
+    if (!trip || !trip.uid) return;
+    
+    if (this.tempParcels.length === 0 && this.tempPassengers.length === 0) {
+        alert("Aucun élément à ajouter."); return;
+    }
+
+    try {
+        const updates: any = {};
+        if (this.tempParcels.length > 0) {
+            updates.parcels = [...(trip.parcels || []), ...this.tempParcels];
+        }
+        if (this.tempPassengers.length > 0) {
+            updates.passengers = [...(trip.passengers || []), ...this.tempPassengers];
+        }
+        
+        updates.hasNewItems = true;
+
+        await this.tripService.updateTrip(trip.uid, updates);
+
+        if (trip.driverId && trip.driverId !== 'PENDING') {
+            const countP = this.tempParcels.length;
+            const countPass = this.tempPassengers.length;
+            let msg = 'Mise à jour trajet : ';
+            if (countP > 0) msg += countP + ' Colis ';
+            if (countPass > 0) msg += countPass + ' Passagers ';
+            msg += 'ajouté(s).';
+            await this.notifService.send(trip.driverId, msg, 'INFO');
+        }
+
+        alert("Ajouts validés avec succès !");
+        this.closeRequestModal();
+
+    } catch (e) {
+        alert("Erreur lors de la sauvegarde : " + e);
+    }
+  }
 }
 
 

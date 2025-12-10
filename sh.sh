@@ -4,7 +4,7 @@ TARGET_FILE="src/app/core/services/chat.service.ts"
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${GREEN}💬 Activation du Chat Global (Toutes sociétés visibles)...${NC}"
+echo -e "${GREEN}💬 Forçage de l'affichage de l'Admin dans le Chat...${NC}"
 
 cat <<'EOF' > "$TARGET_FILE"
 import { Injectable, inject } from '@angular/core';
@@ -31,6 +31,10 @@ export class ChatService {
   private targetUserSource = new BehaviorSubject<UserProfile | null>(null);
   targetUser$ = this.targetUserSource.asObservable();
 
+  // ID Connu de l'Admin (récupéré de vos logs précédents)
+  // Cela permet de relier les conversations existantes
+  private readonly ADMIN_UID = 'mT28TMpRcBMmulaJuYJtMrrZyUU2'; 
+
   startChatWith(user: UserProfile) { 
     this.targetUserSource.next(user);
   }
@@ -54,29 +58,30 @@ export class ChatService {
     return listVal(q) as Observable<ChatMessage[]>;
   }
 
-  // --- LOGIQUE CHAT GLOBAL ---
   getContacts(currentUserId: string): Observable<UserProfile[]> {
     return this.userService.getAllUsers().pipe(
       map(users => {
-        // 1. Définition du Super Admin (Virtuel ou Réel)
-        const superAdminEmail = 'admin@gmail.com';
-        
-        // Si le Super Admin n'est pas dans la liste (cas du compte système), on l'ajoute virtuellement
-        const adminExists = users.find(u => u.email === superAdminEmail || u.role === 'SUPER_ADMIN');
+        // 1. Création du profil Admin de secours (Fallback)
+        const virtualAdmin: UserProfile = {
+            uid: this.ADMIN_UID,
+            email: 'admin@gmail.com',
+            displayName: '⚡ Support / Admin', // Nom affiché
+            role: 'SUPER_ADMIN',
+            company: 'System',
+            isActive: true,
+            phoneNumber: '+216 00 000 000',
+            createdAt: new Date()
+        };
+
+        // 2. Vérifie si l'admin est déjà dans la liste récupérée de Firebase
+        const adminExists = users.some(u => u.uid === this.ADMIN_UID || u.email === 'admin@gmail.com');
+
+        // 3. S'il n'existe pas, on l'ajoute manuellement en haut de liste
         if (!adminExists) {
-            users.unshift({
-                uid: 'super_admin_system',
-                email: superAdminEmail,
-                displayName: '⚡ Support / Admin',
-                role: 'SUPER_ADMIN',
-                company: 'System',
-                isActive: true,
-                phoneNumber: '',
-                createdAt: new Date()
-            });
+            users.unshift(virtualAdmin);
         }
 
-        // 2. Filtrage simple : Tout le monde sauf moi
+        // 4. Filtrage final : On retire l'utilisateur courant (moi-même)
         return users.filter(u => u.uid !== currentUserId);
       })
     );
@@ -84,4 +89,4 @@ export class ChatService {
 }
 EOF
 
-echo -e "${GREEN}✅ Chat mis à jour : Tout le monde est visible !${NC}"
+echo -e "${GREEN}✅ Chat réparé : L'Admin apparaîtra maintenant toujours dans la liste.${NC}"

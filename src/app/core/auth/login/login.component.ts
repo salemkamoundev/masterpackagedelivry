@@ -44,22 +44,12 @@ import { of } from 'rxjs';
 
         <div class="mt-4">
            <button (click)="loginWithGoogle()" type="button" class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 flex items-center justify-center gap-2">
-             <svg class="h-5 w-5" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                  <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/>
-                  <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/>
-                  <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/>
-                  <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/>
-                </g>
-             </svg>
-             Connexion Google
+             <span class="font-bold text-lg">G</span> Connexion Google
            </button>
         </div>
 
         <div class="text-center mt-4">
-          <a routerLink="/register" class="font-medium text-indigo-600 hover:text-indigo-500">
-            Pas encore de compte ? S'inscrire
-          </a>
+          <a routerLink="/register" class="font-medium text-indigo-600 hover:text-indigo-500">Pas encore de compte ? S'inscrire</a>
         </div>
       </div>
     </div>
@@ -76,8 +66,7 @@ export class LoginComponent {
   });
 
   private checkStatusAndRedirect(profile: any) {
-    // BYPASS SUPER ADMIN : Si c'est l'admin, on ignore le statut isActive
-    if (profile?.email === 'admin@gmail.com') {
+    if (profile?.email === 'admin@gmail.com' || profile?.role === 'SUPER_ADMIN') {
         this.router.navigate(['/admin']);
         return;
     }
@@ -90,50 +79,49 @@ export class LoginComponent {
       }
     } else {
       this.authService.logout().subscribe(() => {
-         alert("Votre compte n'est pas encore validé. Veuillez attendre l'approbation d'un administrateur avant de pouvoir vous connecter.");
+         alert("Votre compte n'est pas encore validé.");
       });
     }
+  }
+
+  // FORCE L'ENREGISTREMENT DU SUPER ADMIN DANS LA BASE
+  private async ensureAdminProfile(user: any) {
+      if (user.email === 'admin@gmail.com') {
+          // On force la création/mise à jour du profil Firestore avec le VRAI UID
+          await this.authService.createProfile(user, 'Super Admin', 'SUPER_ADMIN', 'System', '00000000').toPromise();
+      }
   }
 
   onSubmit() {
     if (this.loginForm.valid) {
       const { email, password } = this.loginForm.value;
-      
       this.authService.login(email!, password!).pipe(
-        switchMap(cred => {
-           // BYPASS IMMEDIAT SI EMAIL ADMIN
-           if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
-               return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true }); // Faux profil pour passer
-           }
-           return this.authService.getUserProfile(cred.user.uid);
-        })
+        switchMap(async (cred) => {
+           // 1. Si c'est l'admin, on s'assure qu'il existe en base avec son vrai ID
+           await this.ensureAdminProfile(cred.user);
+           return cred;
+        }),
+        switchMap(cred => this.authService.getUserProfile(cred.user.uid))
       ).subscribe({
         next: (profile) => this.checkStatusAndRedirect(profile),
-        error: (err) => alert('Erreur de connexion: ' + err.message)
+        error: (err) => alert('Erreur : ' + err.message)
       });
     }
   }
 
   loginWithGoogle() {
     this.authService.loginGoogle().pipe(
-      switchMap(cred => {
-         if (cred.user.email?.toLowerCase() === 'admin@gmail.com') {
-            return of({ email: 'admin@gmail.com', role: 'SUPER_ADMIN', isActive: true });
-         }
-         return this.authService.getUserProfile(cred.user.uid);
-      })
+      switchMap(async (cred) => {
+         await this.ensureAdminProfile(cred.user); // On assure que l'admin est en base
+         return cred;
+      }),
+      switchMap(cred => this.authService.getUserProfile(cred.user.uid))
     ).subscribe({
       next: (profile) => {
-        if (profile) {
-          this.checkStatusAndRedirect(profile);
-        } else {
-          this.router.navigate(['/complete-profile']);
-        }
+        if (profile) this.checkStatusAndRedirect(profile);
+        else this.router.navigate(['/complete-profile']);
       },
-      error: (err) => {
-         console.error('Google Auth Error:', err);
-         alert('Erreur Google: ' + err.message);
-      }
+      error: (err) => alert('Erreur Google: ' + err.message)
     });
   }
 }

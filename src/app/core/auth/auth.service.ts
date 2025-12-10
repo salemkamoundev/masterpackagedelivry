@@ -10,7 +10,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore';
 export interface UserProfile {
   uid: string;
   email: string;
-  displayName: string; // NOUVEAU
+  displayName: string;
   role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN';
   company: string;
   phoneNumber: string;
@@ -39,24 +39,31 @@ export class AuthService {
     return from(signInWithPopup(this.auth, provider));
   }
 
-  register(email: string, pass: string, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  // MISE A JOUR DES TYPES ICI (Ajout de ADMIN et SUPER_ADMIN)
+  register(email: string, pass: string, name: string, role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN', company: string, phoneNumber: string) {
     return from(createUserWithEmailAndPassword(this.auth, email, pass)).pipe(
       switchMap(credential => this.createProfile(credential.user, name, role, company, phoneNumber))
     );
   }
 
-  // Signature mise à jour avec 'name'
-  createProfile(user: User, name: string, role: 'DRIVER' | 'EMPLOYEE', company: string, phoneNumber: string) {
+  // CORRECTION DE L'ERREUR TS2345 ICI
+  createProfile(user: User, name: string, role: 'DRIVER' | 'EMPLOYEE' | 'ADMIN' | 'SUPER_ADMIN', company: string, phoneNumber: string) {
     const userProfile: UserProfile = {
       uid: user.uid,
       email: user.email || '',
-      displayName: name, // Stockage du nom
+      displayName: name,
       role: role,
       company: company,
       phoneNumber: phoneNumber,
       isActive: false, 
       createdAt: new Date()
     };
+
+    // Le Super Admin est toujours actif par défaut
+    if (role === 'SUPER_ADMIN') {
+        userProfile.isActive = true;
+    }
+
     const userDocRef = doc(this.firestore, 'users', user.uid);
     return from(setDoc(userDocRef, userProfile));
   }
