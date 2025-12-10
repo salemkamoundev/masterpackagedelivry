@@ -1,174 +1,112 @@
 const admin = require('firebase-admin');
-const path = require('path');
-const { log } = require('console');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
-// ⚠️ Clé de service (téléchargée depuis la console Firebase)
+// Assurez-vous d'avoir votre clé privée ici
 const serviceAccount = require('../serviceAccountKey.json');
-console.log('🧾 serviceAccount project_id =', serviceAccount.project_id);
 
-// Initialisation Admin
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// Initialisation de Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 
-const db = admin.firestore();
+const db = getFirestore();
 const messaging = admin.messaging();
 
+console.log(`🧾 serviceAccount project_id = ${serviceAccount.project_id}`);
 console.log("Tentative de connexion à Firestore...");
 console.log("------------------------------------------------");
 console.log("👀 LE ROBOT EST EN LIGNE !");
 console.log("📡 Il surveille Firestore en attente de nouveautés...");
 console.log("------------------------------------------------");
 
-// ==================================================================
-// 1. SURVEILLANCE DES MESSAGES (Collection 'messages')
-// ==================================================================
-//
-// Structure attendue des documents dans 'messages':
-// {
-//   chatId: string,
-//   senderId: string,
-//   receiverId: string,
-//   text: string,
-//   createdAt: number
-// }
-// ==================================================================
+// Variable pour ignorer les messages déjà présents au démarrage du script
+let isFirstRun = true;
 
-db.collection('messages').onSnapshot(
-  (snapshot) => {
-    snapshot.docChanges().forEach(async (change) => {
-      if (change.type !== 'added') return;
+// Écoute en temps réel de la collection 'messages'
+db.collection('messages').onSnapshot(snapshot => {
+  
+  // Au premier chargement, on marque juste le flag à false pour ne pas spammer
+  if (isFirstRun) {
+    isFirstRun = false;
+    return;
+  }
 
-      const msg = change.doc.data();
+  snapshot.docChanges().forEach(async (change) => {
+    // On ne réagit qu'aux AJOUTS de documents (nouveaux messages)
+    if (change.type === 'added') {
+      const msgData = change.doc.data();
+      const receiverId = msgData.receiverId;
+      const text = msgData.text;
 
-      const { chatId, senderId, receiverId, text } = msg;
-
-      if (!receiverId || !senderId || !chatId || !text) {
-        console.log('⚠️ Message incomplet, ignoré :', msg);
-        return;
-      }
+      // Vérifications de base
+      if (!receiverId || !text) return;
 
       console.log(`💬 Nouveau message détecté pour : ${receiverId}`);
-      console.log('Message :', text);
+      console.log(`Message : ${text}`);
 
-      await sendNotification(receiverId, {
-        title: 'Nouveau message',
-        body: text,
-        type: 'CHAT_MSG',
-        sender: senderId,
-        content: text
-        // from / to ne sont pas nécessaires ici,
-        // mais si tu veux les ajouter tu peux mettre:
-        // from: senderId,
-        // to: receiverId
-      });
-    });
-  },
-  (error) => {
-    console.error("❌ ERREUR FIRESTORE (messages) :", error);
-    if (error.code === 'permission-denied') {
-      console.error("👉 Vérifie tes règles de sécurité (Firestore Rules) pour 'messages' !");
-    }
-  }
-);
+      // 1. Récupérer le token du destinataire dans Firestore
+      const userRef = db.collection('users').doc(receiverId);
+      const userDoc = await userRef.get();
 
-// ==================================================================
-// 2. SURVEILLANCE DES COURSES (Collection 'rides' ou 'trips')
-// ==================================================================
-//
-// ⚠️ Adapter "rides" à ton vrai nom de collection si besoin (peut-être 'trips')
-// Structure attendue : { status: 'pending', driverId, from, to, price, ... }
-// ==================================================================
-
-db.collection('rides').where('status', '==', 'pending').onSnapshot(
-  (snapshot) => {
-    snapshot.docChanges().forEach(async (change) => {
-      if (change.type !== 'added') return;
-
-      const ride = change.doc.data();
-      const driverId = ride.driverId;
-
-      if (!driverId) {
-        console.log('⚠️ Course sans driverId, ignorée :', ride);
+      if (!userDoc.exists) {
+        console.log(`⚠️ Utilisateur ${receiverId} introuvable en base.`);
         return;
       }
 
-      console.log(`🚖 Nouvelle course pour le chauffeur : ${driverId}`);
+      const userData = userDoc.data();
+      const fcmToken = userData.fcmToken;
 
-      await sendNotification(driverId, {
-        title: 'Nouvelle Course !',
-        body: `De ${ride.from} vers ${ride.to}`,
-        type: 'NEW_RIDE',
-        from: ride.from,
-        to: ride.to,
-        price: ride.price
-      });
-    });
-  },
-  (error) => {
-    console.error("❌ ERREUR FIRESTORE (rides) :", error);
-    if (error.code === 'permission-denied') {
-      console.error("👉 Vérifie tes règles de sécurité (Firestore Rules) pour 'rides' !");
-    }
-  }
-);
-
-// ==================================================================
-// 3. FONCTION D'ENVOI DE NOTIFICATION PUSH
-// ==================================================================
-async function sendNotification(userId, data) {
-  try {
-    // 1. Récupérer le token du user dans Firestore
-    const userDoc = await db.collection('users').doc(userId).get();
-
-    if (!userDoc.exists) {
-      console.log(`❌ User ${userId} introuvable en base.`);
-      return;
-    }
-
-    const userData = userDoc.data();
-    const fcmToken = userData.fcmToken;
-
-    if (!fcmToken) {
-      console.log(`⚠️ Le user ${userId} n'a pas de token FCM (notifications non activées).`);
-      return;
-    }
-
-    console.log(`📡 Envoi d'une notif à ${userId} avec le token : ${fcmToken}`);
-
-    // 2. Préparer le message FCM
-    const message = {
-      token: fcmToken,
-      notification: {
-        title: data.title || 'Notification',
-        body: data.body || ''
-      },
-      data: {
-        type: data.type || '',
-        fromUser: data.from || '',
-        toUser: data.to || '',
-        price: String(data.price || ''),
-        sender: data.sender || '',
-        content: data.content || ''
+      if (!fcmToken) {
+        console.log(`⚠️ Pas de token FCM pour ${userData.displayName || userData.email}. Notification ignorée.`);
+        return;
       }
-    };
 
-    // 3. Envoyer via Firebase Admin
+      console.log(`📡 Envoi d'une notif à ${receiverId} avec le token : ${fcmToken}`);
+
+      // 2. Envoyer la notification via FCM
+      await sendNotification(fcmToken, text, receiverId, userRef);
+    }
+  });
+}, error => {
+  console.error("❌ Erreur critique du listener Firestore:", error);
+});
+
+/**
+ * Envoie la notification et gère le nettoyage des tokens invalides
+ */
+async function sendNotification(token, text, userId, userRef) {
+  const message = {
+    notification: {
+      title: 'Nouveau message',
+      body: text
+    },
+    token: token
+  };
+
+  try {
     const response = await messaging.send(message);
-    console.log('✅ Notification envoyée avec succès ! ID:', response);
-
+    console.log(`✅ Notification envoyée avec succès ! ID: ${response}`);
   } catch (error) {
-    console.error("❌ Erreur lors de l'envoi :", error);
+    console.error('❌ Erreur lors de l\'envoi :', error);
 
-    // Gestion spéciale : token plus valable
-    const code = error.code || error.errorInfo?.code;
-    if (code === 'messaging/registration-token-not-registered') {
-      console.warn('⚠️ Token FCM invalide / expiré. On le supprime en base pour forcer la regen côté client.');
-
-      // On supprime le token côté Firestore
-      await db.collection('users').doc(userId).update({
-        fcmToken: admin.firestore.FieldValue.delete()
-      });
+    // --- C'EST ICI QUE SE FAIT LA RÉPARATION ---
+    // Si l'erreur indique que le token n'existe plus (ex: cache vidé, désinstallé, etc.)
+    if (error.code === 'messaging/registration-token-not-registered' || 
+        error.code === 'messaging/invalid-argument') {
+        
+        console.log(`⚠️ Token FCM invalide / expiré. On le supprime en base pour forcer la regen côté client.`);
+        
+        try {
+            // On supprime le champ fcmToken du document utilisateur
+            await userRef.update({
+                fcmToken: FieldValue.delete()
+            });
+            console.log(`🗑️ Token supprimé de la base pour l'utilisateur ${userId}.`);
+        } catch (dbError) {
+            console.error("❌ Impossible de supprimer le token en base:", dbError);
+        }
     }
   }
 }

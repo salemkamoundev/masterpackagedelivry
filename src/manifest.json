@@ -1,0 +1,17 @@
+{
+  "name": "Master Delivery",
+  "short_name": "MasterDelivery",
+  "theme_color": "#4f46e5",
+  "background_color": "#fafafa",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "assets/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    }
+  ],
+  "gcm_sender_id": "103953800507"
+}

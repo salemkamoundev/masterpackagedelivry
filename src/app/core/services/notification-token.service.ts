@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Messaging, getToken } from '@angular/fire/messaging';
+import { Messaging } from '@angular/fire/messaging';
+import { getToken } from 'firebase/messaging'; // Import natif pour éviter l'erreur de contexte
 import { Firestore, doc, setDoc } from '@angular/fire/firestore';
 import { AuthService } from '../auth/auth.service';
 import { environment } from '../../../environments/environment';
@@ -13,13 +14,11 @@ export class NotificationTokenService {
   private authService = inject(AuthService);
 
   constructor() {
-    // 🔥 Dès qu'un user est connecté, on tente de récupérer + sauver son token
+    // Écoute user connecté
     this.authService.user$.subscribe(user => {
       if (user) {
         console.log('👤 User connecté → récupération du token FCM…', user.uid);
         this.requestPermission(user.uid);
-      } else {
-        console.log('👤 Aucun user connecté → pas de token FCM.');
       }
     });
   }
@@ -34,29 +33,29 @@ export class NotificationTokenService {
         return;
       }
 
-      console.log('✅ Permission notifications acceptée, génération du token FCM…');
-
-      const token = await getToken(this.messaging, {
+      console.log('✅ Permission acceptée, génération du token...');
+      
+      // Utilisation de la fonction native getToken avec l'instance injectée
+      const token = await getToken(this.messaging as any, {
         vapidKey: environment.firebase.vapidKey
       });
 
       if (!token) {
-        console.warn('❌ Aucun token généré (getToken a retourné null).');
+        console.warn('❌ Aucun token généré.');
         return;
       }
 
-      console.log('🔑 Token FCM généré :', token);
-
-      // ➜ Sauvegarde dans users/{uid}
+      console.log('🔑 Token FCM généré et sauvegardé.');
+      
+      // Sauvegarde Firestore
       await setDoc(
         doc(this.firestore, 'users', userId),
-        { fcmToken: token },
+        { fcmToken: token, lastTokenUpdate: new Date().toISOString() },
         { merge: true }
       );
 
-      console.log('📬 Token FCM enregistré dans Firestore pour user :', userId);
     } catch (e) {
-      console.error('❌ Erreur FCM (requestPermission / getToken / setDoc) :', e);
+      console.error('❌ Erreur FCM :', e);
     }
   }
 }

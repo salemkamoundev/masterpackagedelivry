@@ -1,150 +1,123 @@
 #!/bin/bash
 
-FILE="src/app/features/admin/dashboard/admin-dashboard.component.ts"
+FILE="src/app/core/auth/complete-profile/complete-profile.component.ts"
 
-echo "--- 👮 MISE À JOUR HEADER ADMIN (Bouton Messages + Pastille) ---"
+echo "--- 🔒 MISE À JOUR : REDIRECTION APRÈS PROFIL ---"
 
 cat > "$FILE" << 'EOF'
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { AuthService } from '../../../core/auth/auth.service';
-import { ChatService } from '../../../core/services/chat.service';
-import { ChatComponent } from '../../chat/chat.component';
-import { switchMap } from 'rxjs/operators';
-import { of } from 'rxjs';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { AuthService } from '../auth.service';
+import { CompanyService } from '../../services/company.service';
+import { take } from 'rxjs/operators';
 
 @Component({
-  selector: 'app-admin-dashboard',
+  selector: 'app-complete-profile',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ChatComponent],
+  imports: [CommonModule, ReactiveFormsModule],
   template: `
-    <div class="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
-      
-      <div *ngIf="isMobileMenuOpen" (click)="closeMobileMenu()" 
-           class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998] lg:hidden transition-opacity">
-      </div>
-
-      <aside class="fixed inset-y-0 left-0 z-[10000] w-72 bg-slate-900 text-white shadow-2xl flex flex-col transition-transform duration-300 transform lg:translate-x-0"
-             [ngClass]="isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'">
-        
-        <div class="h-20 flex items-center px-8 border-b border-slate-800 bg-slate-950/50">
-          <span class="text-xl font-bold tracking-wide text-white">Master<span class="text-indigo-400">DELIVERY</span></span>
+    <div class="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
+        <div class="text-center">
+          <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Finaliser l'inscription</h2>
+          <p class="mt-2 text-sm text-gray-600">Complétez vos informations.</p>
         </div>
-
-        <nav class="flex-1 py-8 px-4 space-y-1 overflow-y-auto">
-          
-          <a routerLink="/admin" [routerLinkActiveOptions]="{exact: true}" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">🏠</span> Accueil
-          </a>
-
-          <a routerLink="/admin/live-map" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">🌍</span> Carte Live
-          </a>
-
-          <a routerLink="/admin/trips" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">📦</span> Trajets
-          </a>
-
-          <a routerLink="/admin/users" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">👥</span> Utilisateurs
-          </a>
-
-          <a routerLink="/admin/cars" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">🚚</span> Véhicules
-          </a>
-          
-          <a routerLink="/admin/companies" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">🏢</span> Sociétés
-          </a>
-
-          <a routerLink="/admin/chat" routerLinkActive="bg-indigo-600/20 text-white border-l-4 border-indigo-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-slate-400 hover:text-white mb-1 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800 justify-between">
-             <div class="flex items-center"><span class="mr-3">💬</span> Messagerie</div>
-             @if ((unreadMessagesCount() ?? 0) > 0) {
-                <span class="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ unreadMessagesCount() }}</span>
-             }
-          </a>
-
-          <a routerLink="/admin/mock-data" routerLinkActive="bg-purple-600/20 text-white border-l-4 border-purple-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-purple-300 hover:text-white mb-1 mt-6 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">⚡</span> Données Test
-          </a>
-          
-          <button (click)="logout()" class="w-full flex items-center px-4 py-3 text-red-400 hover:text-red-300 mt-6 border-t border-slate-800 pt-4 cursor-pointer hover:bg-slate-800 transition-all">
-             <span class="mr-3">🚪</span> Déconnexion
-          </button>
-        </nav>
-      </aside>
-
-      <div class="lg:pl-72 flex flex-col h-screen w-full relative transition-all duration-300">
         
-        <header class="bg-white border-b h-16 flex items-center justify-between px-4 lg:hidden sticky top-0 z-20 shadow-sm">
-             <div class="flex items-center gap-2">
-                 <button (click)="toggleMobileMenu()" class="text-2xl text-indigo-600 p-2">☰</button>
-                 <span class="font-bold text-gray-800">Master<span class="text-indigo-600">Delivery</span></span>
-             </div>
+        <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Compte Google</label>
+            <div class="mt-1 px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-gray-600 text-sm">
+              {{ (currentUser$ | async)?.email }}
+            </div>
+          </div>
 
-             <button (click)="isChatOpen = true" class="relative p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors">
-                <span class="relative block">
-                    <span class="text-2xl">💬</span>
-                    @if ((unreadMessagesCount() ?? 0) > 0) {
-                        <span class="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm animate-pulse">
-                            {{ unreadMessagesCount() }}
-                        </span>
-                    }
-                </span>
-             </button>
-        </header>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Nom complet</label>
+            <input formControlName="name" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+          </div>
 
-        <main class="flex-1 overflow-y-auto bg-gray-50 p-4">
-             <router-outlet></router-outlet>
-        </main>
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Téléphone</label>
+            <input formControlName="phoneNumber" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Votre Métier</label>
+            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
+              <option value="" disabled>Choisir un métier</option>
+              <option value="DRIVER">Chauffeur</option>
+              <option value="EMPLOYEE">Employé</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700">Votre Société</label>
+            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
+              <option value="" disabled>Choisir une société</option>
+              @for (company of activeCompanies(); track company.uid) { <option [value]="company.name">{{ company.name }}</option> }
+            </select>
+          </div>
+
+          <button type="submit" [disabled]="profileForm.invalid" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
+            Valider et Soumettre
+          </button>
+        </form>
       </div>
-
-      <div *ngIf="isChatOpen" class="fixed inset-0 z-[10001] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col relative animate-fade-in-up">
-             <div class="bg-indigo-900 text-white px-4 py-3 flex justify-between items-center shrink-0">
-                <h3 class="font-bold text-lg flex items-center gap-2">💬 Messagerie</h3>
-                <button (click)="isChatOpen = false" class="text-white/80 hover:text-white text-xl font-bold p-2">✕</button>
-             </div>
-             <div class="flex-1 overflow-hidden relative">
-                <app-chat class="block h-full w-full"></app-chat>
-             </div>
-         </div>
-      </div>
-
     </div>
   `
 })
-export class AdminDashboardComponent {
+export class CompleteProfileComponent implements OnInit {
+  private fb = inject(FormBuilder);
   private authService = inject(AuthService);
-  private chatService = inject(ChatService);
+  private companyService = inject(CompanyService);
+  private router = inject(Router);
 
-  isMobileMenuOpen = false;
-  isChatOpen = false;
-
-  // Signal pour le compteur de messages
-  unreadMessagesCount = toSignal(
-    this.authService.user$.pipe(
-      switchMap(user => user ? this.chatService.getUnreadCount(user.uid) : of(0))
-    ),
-    { initialValue: 0 }
-  );
-
-  userProfile = toSignal(this.authService.user$.pipe(switchMap(user => user ? this.authService.getUserProfile(user.uid) : of(null))));
+  currentUser$ = this.authService.user$;
+  activeCompanies = this.companyService.activeCompanies;
   
-  toggleMobileMenu() { this.isMobileMenuOpen = !this.isMobileMenuOpen; }
-  closeMobileMenu() { this.isMobileMenuOpen = false; }
-  logout() { this.authService.logout().subscribe(); }
+  profileForm = this.fb.group({
+    name: ['', Validators.required],
+    phoneNumber: ['', Validators.required],
+    role: ['', Validators.required],
+    company: ['', Validators.required]
+  });
+
+  ngOnInit() {
+    this.currentUser$.pipe(take(1)).subscribe(user => {
+      if (!user) this.router.navigate(['/login']);
+      else {
+          this.profileForm.patchValue({ name: user.displayName || '' });
+      }
+    });
+  }
+
+  onSubmit() {
+    if (this.profileForm.valid) {
+      this.currentUser$.pipe(take(1)).subscribe(user => {
+        if (user) {
+          const { name, role, company, phoneNumber } = this.profileForm.value;
+          
+          this.authService.createProfile(user, name!, role as any, company!, phoneNumber!).subscribe({
+            next: () => {
+              // LOGIQUE MODIFIÉE ICI :
+              // 1. On affiche l'alerte demandée
+              alert('Votre compte est en attente de validation.');
+              
+              // 2. On déconnecte l'utilisateur pour qu'il ne puisse pas accéder au dashboard
+              // 3. On le renvoie vers la page de login
+              this.authService.logout().subscribe(() => {
+                  this.router.navigate(['/login']);
+              });
+            },
+            error: (err) => alert('Erreur : ' + err.message)
+          });
+        }
+      });
+    }
+  }
 }
 EOF
 
-echo "✅ Header Admin mis à jour avec le bouton Messages."
+echo "✅ Logic CompleteProfile mise à jour : Redirection Login + Alerte."

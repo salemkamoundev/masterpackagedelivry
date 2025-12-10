@@ -54,7 +54,7 @@ import { take } from 'rxjs/operators';
           </div>
 
           <button type="submit" [disabled]="profileForm.invalid" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
-            Valider et Accéder
+            Valider et Soumettre
           </button>
         </form>
       </div>
@@ -71,7 +71,7 @@ export class CompleteProfileComponent implements OnInit {
   activeCompanies = this.companyService.activeCompanies;
   
   profileForm = this.fb.group({
-    name: ['', Validators.required], // Nouveau
+    name: ['', Validators.required],
     phoneNumber: ['', Validators.required],
     role: ['', Validators.required],
     company: ['', Validators.required]
@@ -81,7 +81,6 @@ export class CompleteProfileComponent implements OnInit {
     this.currentUser$.pipe(take(1)).subscribe(user => {
       if (!user) this.router.navigate(['/login']);
       else {
-          // Pré-remplir avec le nom Google si dispo
           this.profileForm.patchValue({ name: user.displayName || '' });
       }
     });
@@ -92,12 +91,18 @@ export class CompleteProfileComponent implements OnInit {
       this.currentUser$.pipe(take(1)).subscribe(user => {
         if (user) {
           const { name, role, company, phoneNumber } = this.profileForm.value;
-          // Correction de l'appel pour inclure 'name'
+          
           this.authService.createProfile(user, name!, role as any, company!, phoneNumber!).subscribe({
             next: () => {
-              alert('Profil complété !');
-              if (role === 'DRIVER') this.router.navigate(['/driver']);
-              else this.router.navigate(['/admin']);
+              // LOGIQUE MODIFIÉE ICI :
+              // 1. On affiche l'alerte demandée
+              alert('Votre compte est en attente de validation.');
+              
+              // 2. On déconnecte l'utilisateur pour qu'il ne puisse pas accéder au dashboard
+              // 3. On le renvoie vers la page de login
+              this.authService.logout().subscribe(() => {
+                  this.router.navigate(['/login']);
+              });
             },
             error: (err) => alert('Erreur : ' + err.message)
           });
