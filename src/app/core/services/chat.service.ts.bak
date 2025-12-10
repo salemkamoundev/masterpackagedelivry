@@ -14,8 +14,6 @@ import { UserProfile, AuthService } from '../auth/auth.service';
 import { UserService } from './user.service';
 import { NotificationService } from './notification.service';
 
-import { Firestore, collection, addDoc } from '@angular/fire/firestore';
-
 export interface ChatMessage {
   senderId: string;
   text: string;
@@ -29,13 +27,12 @@ export class ChatService {
   private db = inject(Database);
   private userService = inject(UserService);
   private authService = inject(AuthService);
-  private firestore = inject(Firestore);
-  private notifService = inject(NotificationService);
+  private notifService = inject(NotificationService); // ✅ ICI l’injection correcte
 
   private targetUserSource = new BehaviorSubject<UserProfile | null>(null);
   targetUser$ = this.targetUserSource.asObservable();
 
-  // ID connu de l'Admin
+  // ID connu de l'Admin (récupéré de vos logs précédents)
   private readonly ADMIN_UID = 'mT28TMpRcBMmulaJuYJtMrrZyUU2';
 
   startChatWith(user: UserProfile) {
@@ -46,63 +43,44 @@ export class ChatService {
     return user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
   }
 
-  // ==============================
-  // Envoi d’un message
-  // ==============================
+  // ⬇️ Envoi du message + meta + notification app
   async sendMessage(chatId: string, senderId: string, text: string) {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
 
-    // 1) Sauvegarde dans Realtime Database (pour l’affichage live du chat)
-    const messagesRef = ref(this.db, `chats/${chatId}/messages`);
-    const newMessageRef = push(messagesRef);
+  // --- 1. Sauvegarde dans Realtime DB (pour affichage live)
+  const messagesRef = ref(this.db, `chats/${chatId}/messages`);
+  const newMessageRef = push(messagesRef);
+  await set(newMessageRef, {
+    senderId,
+    text: trimmed,
+    createdAt: Date.now()
+  });
 
-    await set(newMessageRef, {
-      senderId,
-      text: trimmed,
-      createdAt: Date.now()
-    });
+  // --- 2. Calcul du receiverId
+  const [u1, u2] = chatId.split('_');
+  const receiverId = senderId === u1 ? u2 : u1;
 
-    // 2) Déterminer le receiverId à partir du chatId
-    const [u1, u2] = chatId.split('_');
-    const receiverId = senderId === u1 ? u2 : u1;
+  // --- 3. Création d’un doc Firestore pour le robot push
+  await addDoc(collection(this.firestore, 'messages'), {
+    chatId,
+    senderId,
+    receiverId,     // 🔥 indispensable
+    text: trimmed,
+    createdAt: Date.now()
+  });
+}
 
-    // 3) Sauvegarde dans Firestore (pour le script Node / push FCM)
-    await addDoc(collection(this.firestore, 'messages'), {
-      chatId,
-      senderId,
-      receiverId,
-      text: trimmed,
-      createdAt: Date.now()
-    });
 
-    // 4) Notification in-app (bannière HTML)
-    try {
-      await this.notifService.send(
-        receiverId,
-        `Nouveau message : ${trimmed.substring(0, 80)}`
-      );
-    } catch (e) {
-      console.error("Erreur lors de l'envoi de la notification in-app :", e);
-    }
-  }
-
-  // ==============================
-  // Récupération des messages
-  // ==============================
   getMessages(chatId: string): Observable<ChatMessage[]> {
     const messagesRef = ref(this.db, `chats/${chatId}/messages`);
     const q = query(messagesRef, orderByChild('createdAt'));
     return listVal<ChatMessage>(q);
   }
 
-  // ==============================
-  // Liste des contacts
-  // ==============================
   getContacts(currentUserId: string): Observable<UserProfile[]> {
     return this.userService.getAllUsers().pipe(
-      map((users: UserProfile[]) => {
-        // Admin virtuel si besoin
+      map(users => {
         const virtualAdmin: UserProfile = {
           uid: this.ADMIN_UID,
           email: 'admin@gmail.com',
@@ -122,7 +100,6 @@ export class ChatService {
           users.unshift(virtualAdmin);
         }
 
-        // On enlève l’utilisateur courant
         return users.filter(u => u.uid !== currentUserId);
       })
     );

@@ -1,44 +1,69 @@
 #!/bin/bash
+echo "-----------------------------------------------------------"
+echo "🔧 Patch Notifications - ChatService + receiverId + Firestore"
+echo "-----------------------------------------------------------"
 
-# -------------------------------------------------------------------
-# Script pour corriger l'erreur NG0200 liée au double ChatService
-# -------------------------------------------------------------------
+FILE="src/app/core/services/chat.service.ts"
 
-OLD_SERVICE="src/app/services/chat.service.ts"
-NEW_SERVICE="src/app/core/services/chat.service.ts"
-
-echo "=== Fix Angular ChatService (NG0200 Circular Dependency) ==="
-
-# Vérifier si le fichier core existe (sécurité)
-if [ ! -f "$NEW_SERVICE" ]; then
-  echo "❌ ERREUR : Le fichier $NEW_SERVICE n'existe pas."
-  echo "   Impossible de continuer."
+if [ ! -f "$FILE" ]; then
+  echo "❌ Fichier introuvable : $FILE"
   exit 1
 fi
 
-# Supprimer l'ancien ChatService s'il existe
-if [ -f "$OLD_SERVICE" ]; then
-  echo "➡️  Ancien service détecté : $OLD_SERVICE"
-  echo "🗑  Suppression..."
-  rm "$OLD_SERVICE"
-  echo "✔ Ancien ChatService supprimé."
-else
-  echo "✔ Aucun ancien ChatService à supprimer (OK)."
-fi
+# Sauvegarde
+cp "$FILE" "${FILE}.bak"
+echo "📦 Sauvegarde créée : chat.service.ts.bak"
 
-# Recherche de vieux imports
-echo ""
-echo "🔍 Recherche d'imports problématiques dans le projet..."
-grep -R "src/app/services/chat.service" -n src/app
+# Réécriture complète de sendMessage()
+sed -i "" '/async sendMessage/,/getMessages/{
+/async sendMessage/,/}/d
+}' "$FILE"
 
-if [ $? -eq 0 ]; then
-  echo "⚠️  Attention : certains fichiers importent encore l'ancien service."
-  echo "➡️  Corrige manuellement les imports vers :"
-  echo "    $NEW_SERVICE"
-else
-  echo "✔ Aucun import obsolète détecté."
-fi
+cat << 'EOF' >> "$FILE"
 
-echo ""
-echo "🎉 Correction terminée !"
-echo "👉 Pense à relancer 'ng serve' pour un build propre."
+  // ------------------------------
+  // Nouveau sendMessage corrigé
+  // ------------------------------
+  async sendMessage(chatId: string, senderId: string, text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // 1. ➜ Sauvegarde RTDB (affichage live du chat)
+    const messagesRef = ref(this.db, `chats/${chatId}/messages`);
+    const newMessageRef = push(messagesRef);
+
+    await set(newMessageRef, {
+      senderId,
+      text: trimmed,
+      createdAt: Date.now()
+    });
+
+    // 2. ➜ Déterminer receiverId automatiquement
+    const [u1, u2] = chatId.split('_');
+    const receiverId = senderId === u1 ? u2 : u1;
+
+    // 3. ➜ Sauvegarde Firestore (pour le robot de notifications)
+    await addDoc(collection(this.firestore, 'messages'), {
+      chatId,
+      senderId,
+      receiverId,
+      text: trimmed,
+      createdAt: Date.now()
+    });
+
+    // 4. ➜ Notification interne "in-app"
+    try {
+      await this.notifService.send(
+        receiverId,
+        `Nouveau message : ${trimmed.substring(0, 50)}`
+      );
+    } catch (e) {
+      console.error("Erreur lors de l'envoi de la notification in-app :", e);
+    }
+  }
+EOF
+
+echo "✅ Patch appliqué correctement."
+echo "👉 Vérifie maintenant que ton script Node reçoit bien receiverId"
+echo "👉 N'oublie pas de relancer : ng serve"
+echo "-----------------------------------------------------------"

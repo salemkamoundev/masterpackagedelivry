@@ -96,6 +96,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
     </div>
   `
 })
+
 export class AdminDashboardComponent {
   private authService = inject(AuthService);
   isMobileMenuOpen = false;
