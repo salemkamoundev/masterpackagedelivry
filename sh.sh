@@ -1,123 +1,86 @@
 #!/bin/bash
 
-FILE="src/app/core/auth/complete-profile/complete-profile.component.ts"
+FILE="src/app/features/admin/trips/trip-manager.component.ts"
 
-echo "--- 🔒 MISE À JOUR : REDIRECTION APRÈS PROFIL ---"
+echo "--- 🧠 CORRECTION : NOTIFICATION INTELLIGENTE ---"
 
-cat > "$FILE" << 'EOF'
-import { Component, inject, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-import { AuthService } from '../auth.service';
-import { CompanyService } from '../../services/company.service';
-import { take } from 'rxjs/operators';
+# On remplace saveAllExtras par une version qui trouve le chauffeur via le profil enrichi
+cat > temp_save_extras.ts << 'EOF'
+  async saveAllExtras() {
+    // On force le typage en 'any' pour accéder aux propriétés enrichies (driverProfile)
+    const trip = this.selectedTripForRequest as any;
+    
+    if (!trip || !trip.uid) {
+        console.error("❌ Erreur : Pas de trajet sélectionné");
+        return;
+    }
 
-@Component({
-  selector: 'app-complete-profile',
-  standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  template: `
-    <div class="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
-        <div class="text-center">
-          <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Finaliser l'inscription</h2>
-          <p class="mt-2 text-sm text-gray-600">Complétez vos informations.</p>
-        </div>
+    if (this.tempParcels.length === 0 && this.tempPassengers.length === 0) {
+        alert("Aucun élément à ajouter.");
+        return;
+    }
+
+    try {
+        // 1. Déterminer le VRAI destinataire de la notif
+        // On regarde d'abord le driverId du trajet, sinon on prend celui du profil enrichi (via le véhicule)
+        let targetDriverId = trip.driverId;
         
-        <form [formGroup]="profileForm" (ngSubmit)="onSubmit()" class="mt-8 space-y-6">
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Compte Google</label>
-            <div class="mt-1 px-3 py-2 border border-gray-200 bg-gray-50 rounded-md text-gray-600 text-sm">
-              {{ (currentUser$ | async)?.email }}
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Nom complet</label>
-            <input formControlName="name" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Téléphone</label>
-            <input formControlName="phoneNumber" type="text" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm">
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Votre Métier</label>
-            <select formControlName="role" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
-              <option value="" disabled>Choisir un métier</option>
-              <option value="DRIVER">Chauffeur</option>
-              <option value="EMPLOYEE">Employé</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700">Votre Société</label>
-            <select formControlName="company" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 rounded-md bg-white">
-              <option value="" disabled>Choisir une société</option>
-              @for (company of activeCompanies(); track company.uid) { <option [value]="company.name">{{ company.name }}</option> }
-            </select>
-          </div>
-
-          <button type="submit" [disabled]="profileForm.invalid" class="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
-            Valider et Soumettre
-          </button>
-        </form>
-      </div>
-    </div>
-  `
-})
-export class CompleteProfileComponent implements OnInit {
-  private fb = inject(FormBuilder);
-  private authService = inject(AuthService);
-  private companyService = inject(CompanyService);
-  private router = inject(Router);
-
-  currentUser$ = this.authService.user$;
-  activeCompanies = this.companyService.activeCompanies;
-  
-  profileForm = this.fb.group({
-    name: ['', Validators.required],
-    phoneNumber: ['', Validators.required],
-    role: ['', Validators.required],
-    company: ['', Validators.required]
-  });
-
-  ngOnInit() {
-    this.currentUser$.pipe(take(1)).subscribe(user => {
-      if (!user) this.router.navigate(['/login']);
-      else {
-          this.profileForm.patchValue({ name: user.displayName || '' });
-      }
-    });
-  }
-
-  onSubmit() {
-    if (this.profileForm.valid) {
-      this.currentUser$.pipe(take(1)).subscribe(user => {
-        if (user) {
-          const { name, role, company, phoneNumber } = this.profileForm.value;
-          
-          this.authService.createProfile(user, name!, role as any, company!, phoneNumber!).subscribe({
-            next: () => {
-              // LOGIQUE MODIFIÉE ICI :
-              // 1. On affiche l'alerte demandée
-              alert('Votre compte est en attente de validation.');
-              
-              // 2. On déconnecte l'utilisateur pour qu'il ne puisse pas accéder au dashboard
-              // 3. On le renvoie vers la page de login
-              this.authService.logout().subscribe(() => {
-                  this.router.navigate(['/login']);
-              });
-            },
-            error: (err) => alert('Erreur : ' + err.message)
-          });
+        if ((!targetDriverId || targetDriverId === 'PENDING') && trip.driverProfile) {
+            targetDriverId = trip.driverProfile.uid;
+            console.log("💡 Chauffeur trouvé via le véhicule :", targetDriverId);
         }
-      });
+
+        const updates: any = {};
+        
+        if (this.tempParcels.length > 0) {
+            updates.parcels = [...(trip.parcels || []), ...this.tempParcels];
+        }
+        if (this.tempPassengers.length > 0) {
+            updates.passengers = [...(trip.passengers || []), ...this.tempPassengers];
+        }
+        
+        updates.hasNewItems = true;
+        
+        // Si on a trouvé un chauffeur via le véhicule mais que le trajet était PENDING, 
+        // on assigne officiellement le chauffeur au trajet maintenant !
+        if (targetDriverId && targetDriverId !== 'PENDING' && trip.driverId === 'PENDING') {
+            updates.driverId = targetDriverId;
+            updates.status = 'IN_PROGRESS'; // On passe en cours car un chauffeur est là
+        }
+
+        console.log("💾 Mise à jour Firestore...", updates);
+        await this.tripService.updateTrip(trip.uid, updates);
+
+        // 2. Envoi de la Notification
+        if (targetDriverId && targetDriverId !== 'PENDING') {
+            const countP = this.tempParcels.length;
+            const countPass = this.tempPassengers.length;
+            
+            let details = [];
+            if (countP > 0) details.push(`${countP} Colis`);
+            if (countPass > 0) details.push(`${countPass} Passager(s)`);
+            
+            const msg = `Mise à jour : Ajout de ${details.join(' et ')} pour ${trip.destination}.`;
+            
+            console.log(`🚀 Envoi de la notification à ${targetDriverId} : ${msg}`);
+            await this.notifService.send(targetDriverId, msg, 'INFO');
+        } else {
+            console.warn("⚠️ Impossible de trouver un chauffeur à notifier (Pas de driverId ni de driverProfile)");
+        }
+
+        alert("Modifications enregistrées !");
+        this.closeRequestModal();
+        
+    } catch (e) {
+        console.error(e);
+        alert("Erreur technique : " + e);
     }
   }
-}
 EOF
 
-echo "✅ Logic CompleteProfile mise à jour : Redirection Login + Alerte."
+# Injection du code
+perl -i -0777 -pe 'BEGIN{local $/; open(F,"<temp_save_extras.ts"); $code=<F>; close(F);} s/async saveAllExtras\(\) \{.*?\n  \}/$code/s' "$FILE"
+
+rm temp_save_extras.ts
+
+echo "✅ Logique de notification corrigée : Le chauffeur lié au véhicule sera maintenant notifié."

@@ -66,10 +66,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
              }
           </a>
 
-          <a routerLink="/admin/mock-data" routerLinkActive="bg-purple-600/20 text-white border-l-4 border-purple-500" (click)="closeMobileMenu()"
-             class="flex items-center px-4 py-3 rounded-r-lg text-purple-300 hover:text-white mb-1 mt-6 border-l-4 border-transparent cursor-pointer transition-all hover:bg-slate-800">
-             <span class="mr-3">⚡</span> Données Test
-          </a>
           
           <button (click)="logout()" class="w-full flex items-center px-4 py-3 text-red-400 hover:text-red-300 mt-6 border-t border-slate-800 pt-4 cursor-pointer hover:bg-slate-800 transition-all">
              <span class="mr-3">🚪</span> Déconnexion

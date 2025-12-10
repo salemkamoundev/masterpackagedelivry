@@ -246,7 +246,50 @@ export class TripManagerComponent {
   removePassenger(i: number) { this.passengersArray.removeAt(i); }
   toggleForm() { this.showForm = !this.showForm; }
   
-  async createTrip() { if (this.tripForm.valid) { await this.tripService.createTrip({ ...this.tripForm.value, driverId: 'PENDING', status: 'PENDING', company: this.adminCompany() === 'System' ? 'Tunisia Express' : this.adminCompany(), parcels: this.tripForm.value.parcels ?? [], passengers: this.tripForm.value.passengers ?? [], extraRequests: [] } as any); this.tripForm.reset(); this.parcelsArray.clear(); this.passengersArray.clear(); this.showForm = false; } }
+    async createTrip() {
+    if (this.tripForm.invalid) return;
+
+    // 1. Récupérer le véhicule sélectionné pour trouver le chauffeur
+    const formVal = this.tripForm.value;
+    // Utilisation d'un import dynamique pour firstValueFrom pour éviter les conflits d'imports
+    const { firstValueFrom } = await import('rxjs');
+    const allCars = await firstValueFrom(this.cars$);
+    const selectedCar = allCars.find(c => c.uid === formVal.carId);
+    
+    // Si le véhicule a un chauffeur, on l'assigne direct, sinon PENDING
+    const assignedDriverId = selectedCar?.assignedDriverId || 'PENDING';
+
+    try {
+        // 2. Création du trajet
+        await this.tripService.createTrip({
+            ...formVal,
+            driverId: assignedDriverId,
+            status: 'PENDING',
+            company: this.adminCompany() === 'System' ? 'Tunisia Express' : this.adminCompany(),
+            parcels: formVal.parcels ?? [],
+            passengers: formVal.passengers ?? [],
+            extraRequests: []
+        } as any);
+
+        // 3. Envoi de la notification SI un chauffeur est assigné
+        if (assignedDriverId !== 'PENDING') {
+            const msg = `Nouveau trajet assigné : ${formVal.departure} ➝ ${formVal.destination}`;
+            await this.notifService.send(assignedDriverId, msg, 'INFO');
+            console.log("🔔 Notification envoyée au chauffeur " + assignedDriverId);
+        }
+
+        // Reset
+        this.tripForm.reset();
+        this.parcelsArray.clear();
+        this.passengersArray.clear();
+        this.showForm = false;
+        alert('Trajet créé et chauffeur notifié !');
+
+    } catch (e) {
+        alert('Erreur lors de la création : ' + e);
+    }
+  }
+
   
   requestForm = this.fb.group({ type: ['PARCEL'], description: [''], parcels: this.fb.array([]) });
   openRequestModal(t: Trip) { 
@@ -318,17 +361,32 @@ export class TripManagerComponent {
   removeTempParcel(index: number) { this.tempParcels.splice(index, 1); }
   removeTempPassenger(index: number) { this.tempPassengers.splice(index, 1); }
 
-  async saveAllExtras() {
-    const trip = this.selectedTripForRequest;
-    if (!trip || !trip.uid) return;
+          async saveAllExtras() {
+    // On force le typage en 'any' pour accéder aux propriétés enrichies (driverProfile)
+    const trip = this.selectedTripForRequest as any;
     
+    if (!trip || !trip.uid) {
+        console.error("❌ Erreur : Pas de trajet sélectionné");
+        return;
+    }
+
     if (this.tempParcels.length === 0 && this.tempPassengers.length === 0) {
         alert("Aucun élément à ajouter.");
         return;
     }
 
     try {
+        // 1. Déterminer le VRAI destinataire de la notif
+        // On regarde d'abord le driverId du trajet, sinon on prend celui du profil enrichi (via le véhicule)
+        let targetDriverId = trip.driverId;
+        
+        if ((!targetDriverId || targetDriverId === 'PENDING') && trip.driverProfile) {
+            targetDriverId = trip.driverProfile.uid;
+            console.log("💡 Chauffeur trouvé via le véhicule :", targetDriverId);
+        }
+
         const updates: any = {};
+        
         if (this.tempParcels.length > 0) {
             updates.parcels = [...(trip.parcels || []), ...this.tempParcels];
         }
@@ -337,22 +395,44 @@ export class TripManagerComponent {
         }
         
         updates.hasNewItems = true;
-        await this.tripService.updateTrip(trip.uid, updates);
-
-        if (trip.driverId && trip.driverId !== 'PENDING') {
-            const countP = this.tempParcels.length;
-            const countPass = this.tempPassengers.length;
-            let msg = 'Mise à jour trajet : ';
-            if (countP > 0) msg += countP + ' Colis ';
-            if (countPass > 0) msg += countPass + ' Passagers ';
-            msg += 'ajouté(s).';
-            await this.notifService.send(trip.driverId, msg, 'INFO');
+        
+        // Si on a trouvé un chauffeur via le véhicule mais que le trajet était PENDING, 
+        // on assigne officiellement le chauffeur au trajet maintenant !
+        if (targetDriverId && targetDriverId !== 'PENDING' && trip.driverId === 'PENDING') {
+            updates.driverId = targetDriverId;
+            updates.status = 'IN_PROGRESS'; // On passe en cours car un chauffeur est là
         }
 
-        alert("Ajouts validés avec succès !");
+        console.log("💾 Mise à jour Firestore...", updates);
+        await this.tripService.updateTrip(trip.uid, updates);
+
+        // 2. Envoi de la Notification
+        if (targetDriverId && targetDriverId !== 'PENDING') {
+            const countP = this.tempParcels.length;
+            const countPass = this.tempPassengers.length;
+            
+            let details = [];
+            if (countP > 0) details.push(`${countP} Colis`);
+            if (countPass > 0) details.push(`${countPass} Passager(s)`);
+            
+            const msg = `Mise à jour : Ajout de ${details.join(' et ')} pour ${trip.destination}.`;
+            
+            console.log(`🚀 Envoi de la notification à ${targetDriverId} : ${msg}`);
+            await this.notifService.send(targetDriverId, msg, 'INFO');
+        } else {
+            console.warn("⚠️ Impossible de trouver un chauffeur à notifier (Pas de driverId ni de driverProfile)");
+        }
+
+        alert("Modifications enregistrées !");
         this.closeRequestModal();
+        
     } catch (e) {
-        alert("Erreur lors de la sauvegarde : " + e);
+        console.error(e);
+        alert("Erreur technique : " + e);
     }
   }
+
+
+
+
 }
