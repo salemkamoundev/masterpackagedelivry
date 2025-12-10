@@ -1,23 +1,35 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormArray, FormGroup } from '@angular/forms';
 import { AuthService } from '../../../core/auth/auth.service';
 import { TripService, Trip, Parcel, Passenger } from '../../../core/services/trip.service';
 import { CarService, Car } from '../../../core/services/car.service';
+import { NotificationService, AppNotification } from '../../../core/services/notification.service';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { combineLatest, map, switchMap, of } from 'rxjs';
 import { Firestore, doc, updateDoc } from '@angular/fire/firestore';
-
-
 import { ChatComponent } from '../../chat/chat.component';
 
 @Component({
   selector: 'app-driver-dashboard',
   standalone: true,
-  
   imports: [CommonModule, ReactiveFormsModule, ChatComponent],
   template: `
-    <div class="min-h-screen bg-gray-50 flex flex-col">
+    <div class="min-h-screen bg-gray-50 flex flex-col relative">
+      
+      <div class="fixed top-4 right-4 z-[9999] flex flex-col gap-2">
+         @for (notif of notifications$ | async; track notif.uid) {
+             <div class="bg-white border-l-4 border-indigo-600 shadow-xl rounded-r-lg p-4 flex items-start gap-3 w-80 animate-fade-in-left">
+                <div class="text-2xl">🔔</div>
+                <div class="flex-1">
+                   <p class="text-sm font-bold text-gray-800">Notification</p>
+                   <p class="text-sm text-gray-600">{{ notif.message }}</p>
+                </div>
+                <button (click)="markRead(notif)" class="text-gray-400 hover:text-gray-600 font-bold">✕</button>
+             </div>
+         }
+      </div>
+
       <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
         <div class="max-w-7xl mx-auto py-4 px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div class="flex items-center gap-2">
@@ -28,7 +40,6 @@ import { ChatComponent } from '../../chat/chat.component';
              <button (click)="isChatOpen = true" class="flex-1 sm:flex-none bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-100 flex items-center justify-center gap-2">
                 <span>💬</span> Messages
              </button>
-             
              <button (click)="openCreateModal()" class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 flex items-center justify-center gap-2"><span>➕</span> Nouveau Trajet</button>
              <button (click)="logout()" class="text-sm text-red-600 font-bold border border-red-200 bg-red-50 px-3 py-2 rounded hover:bg-red-100 transition-colors">Déconnexion</button>
           </div>
@@ -36,14 +47,14 @@ import { ChatComponent } from '../../chat/chat.component';
       </header>
   
       <main class="flex-1 max-w-7xl mx-auto w-full py-8 px-4 relative">
-         <div *ngIf="!myCar()" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm"><p class="font-bold">⚠️ Aucun véhicule assigné.</p></div>
+        <div *ngIf="!myCar()" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded shadow-sm"><p class="font-bold">⚠️ Aucun véhicule assigné.</p></div>
 
         <div *ngIf="filteredMissions().length > 0; else noMissions">
            <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               @for (trip of filteredMissions(); track trip.uid) {
                  <div class="bg-white shadow-lg rounded-xl border-l-4 overflow-hidden transition-transform hover:scale-[1.02]"
                       [ngClass]="{'border-indigo-500': trip.status === 'PENDING', 'border-blue-500': trip.status === 'IN_PROGRESS', 'border-green-500': trip.status === 'COMPLETED'}">
-                     <div class="p-5">
+                      <div class="p-5">
                         <div class="flex justify-between items-start mb-3">
                            <div><h3 class="font-bold text-lg text-gray-900">{{ trip.destination }}</h3><p class="text-sm text-gray-500">Depuis: {{ trip.departure }}</p></div>
                            <span class="px-2 py-1 text-xs font-bold rounded uppercase tracking-wide" [ngClass]="{'bg-indigo-100 text-indigo-700': trip.status === 'PENDING', 'bg-blue-100 text-blue-700': trip.status === 'IN_PROGRESS', 'bg-green-100 text-green-700': trip.status === 'COMPLETED'}">{{ trip.status }}</span>
@@ -76,7 +87,7 @@ import { ChatComponent } from '../../chat/chat.component';
                     </div>
                     <div [class.hidden]="activeTab !== 'parcels'" class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6">
                        <button type="button" (click)="addParcel()" class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full font-bold mb-3">+ Ajouter Colis</button>
-                        <div formArrayName="parcels" class="space-y-3">
+                       <div formArrayName="parcels" class="space-y-3">
                           @for (p of parcelsArray.controls; track $index) {
                              <div [formGroupName]="$index" class="bg-white p-3 rounded shadow-sm relative grid grid-cols-1 md:grid-cols-2 gap-2">
                                  <button type="button" (click)="removeParcel($index)" class="absolute right-2 top-2 text-red-400 font-bold">✕</button>
@@ -141,9 +152,8 @@ import { ChatComponent } from '../../chat/chat.component';
                         <div class="space-y-4">
                             @for (parcel of getMergedParcels(trip); track $index) {
                                 <div class="border rounded-xl p-4 transition-colors relative" [ngClass]="parcel.delivered ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'">
-                                    <span *ngIf="isExtraParcel(trip, parcel)" class="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">+ Ajouté</span>
                                     <div class="flex justify-between items-start">
-                                         <div class="flex-1">
+                                        <div class="flex-1">
                                             <div class="font-bold text-lg text-gray-800">{{ parcel.description }}</div>
                                             <div class="text-sm mt-1 text-gray-600">👤 {{ parcel.recipientName }} <br>📍 {{ parcel.recipientAddress }}</div>
                                         </div>
@@ -151,10 +161,10 @@ import { ChatComponent } from '../../chat/chat.component';
                                             <button (click)="toggleParcelDelivery(trip, parcel)" class="w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-sm transition-all border-2" [ngClass]="parcel.delivered ? 'bg-green-500 text-white border-green-600 scale-110' : 'bg-white text-gray-300 border-gray-200'">{{ parcel.delivered ? '✓' : '' }}</button>
                                         </div>
                                     </div>
-                                 </div>
+                                </div>
                             }
                             @if (getMergedParcels(trip).length === 0) { <div class="text-center py-4 text-gray-400 italic">Aucun colis.</div> }
-                        </div>
+                         </div>
                     </div>
                 </div>
             </div>
@@ -171,15 +181,15 @@ import { ChatComponent } from '../../chat/chat.component';
                  </div>
              </div>
         </div>
-
       </main>
     </div>
   `
 })
-export class DriverDashboardComponent {
+export class DriverDashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private tripService = inject(TripService);
   private carService = inject(CarService);
+  private notifService = inject(NotificationService);
   private firestore = inject(Firestore);
   private fb = inject(FormBuilder);
   
@@ -189,22 +199,19 @@ export class DriverDashboardComponent {
   
   selectedTrip = signal<Trip | null>(null);
   isCreateModalOpen = false;
-  // 5. ETAT DU CHAT
   isChatOpen = false;
+  notifications$ = of<AppNotification[]>([]);
 
   activeTab: 'parcels' | 'passengers' = 'parcels';
-  
   myCar = toSignal(combineLatest([this.user$, this.cars$]).pipe(
       map(([user, cars]) => user ? cars.find(c => c.assignedDriverId === user.uid) || null : null)
   ));
-  
   missions = toSignal(combineLatest([this.user$, this.cars$, this.allTrips$]).pipe(map(([user, cars, trips]) => {
         if (!user) return [];
         const myCar = cars.find(c => c.assignedDriverId === user.uid);
         if (!myCar) return [];
         return trips.filter(t => t.carId === myCar.uid);
   })), { initialValue: [] });
-  
   filteredMissions = computed(() => this.missions().filter(t => t.status !== 'COMPLETED'));
 
   createForm = this.fb.group({
@@ -214,9 +221,16 @@ export class DriverDashboardComponent {
       parcels: this.fb.array([]),
       passengers: this.fb.array([])
   });
-  
   get parcelsArray() { return this.createForm.get('parcels') as FormArray; }
   get passengersArray() { return this.createForm.get('passengers') as FormArray; }
+
+  ngOnInit() {
+    this.user$.subscribe(user => {
+      if (user) {
+        this.notifications$ = this.notifService.getNotifications(user.uid);
+      }
+    });
+  }
 
   addParcel() { this.parcelsArray.push(this.fb.group({ description: [''], recipientName: [''], recipientPhone: [''], recipientAddress: [''], weight: [1], delivered: [false] })); }
   addPassenger() { this.passengersArray.push(this.fb.group({ name: [''], phone: [''], pickupLocation: [''], dropoffLocation: [''], isDroppedOff: [false] })); }
@@ -251,7 +265,6 @@ export class DriverDashboardComponent {
   }
 
   getMergedParcels(trip: Trip): Parcel[] { return trip.parcels || []; }
-  isExtraParcel(trip: Trip, parcel: Parcel): boolean { return false; }
   
   async toggleParcelDelivery(trip: Trip, parcelToToggle: Parcel) {
       if (!trip.uid || !trip.parcels) return;
@@ -271,10 +284,9 @@ export class DriverDashboardComponent {
      if(t?.uid) { await updateDoc(doc(this.firestore, 'trips', t.uid), { status }); this.closeDetails(); }
   }
   
-  getMapUrl(trip: Trip) { return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(trip.departure)}&destination=${encodeURIComponent(trip.destination)}&travelmode=driving`; }
-  
   logout() { this.authService.logout().subscribe(); }
-  activeCount() { return 0; }
-  setFilter(m: any) {}
-  filterMode = signal('ACTIVE');
+
+  markRead(notif: AppNotification) {
+    if (notif.uid) this.notifService.markAsRead(notif.uid);
+  }
 }
