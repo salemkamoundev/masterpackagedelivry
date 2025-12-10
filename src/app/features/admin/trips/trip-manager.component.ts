@@ -25,16 +25,7 @@ import { combineLatest, of } from 'rxjs';
         <h2 class="text-2xl font-bold text-gray-800">Suivi des Trajets</h2>
         
         <div class="flex items-center gap-3">
-             <button (click)="isChatOpen = true" class="relative bg-white text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg font-bold hover:bg-indigo-50 flex items-center justify-center gap-2 shadow-sm transition-all">
-                <span class="relative flex items-center gap-2">
-                    <span>💬</span> Messages
-                    @if (unreadMessagesCount() > 0) {
-                        <span class="absolute -top-3 -right-3 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-sm animate-pulse">
-                            {{ unreadMessagesCount() }}
-                        </span>
-                    }
-                </span>
-             </button>
+
 
              <button (click)="toggleForm()" class="bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 shadow-md transition-colors flex items-center gap-2">
                 <span>{{ showForm ? "✕" : "➕" }}</span>
