@@ -1,39 +1,95 @@
 #!/bin/bash
 
-echo "======================================================"
-echo "  RESET TOTAL DE L'HISTORIQUE GIT"
-echo "======================================================"
+echo "-----------------------------------------------------------"
+echo "🔧 Patch : Suppression automatique des messages après push"
+echo "-----------------------------------------------------------"
 
-# 1. Créer une branche temporaire vide (sans parents/historique)
-echo "1. Création d'une nouvelle branche vierge..."
-git checkout --orphan temp_branch
+FILE="backend-server/index.js"
 
-# 2. Tout préparer (Staging)
-echo "2. Ajout des fichiers..."
-git add -A
+# Vérifier si le fichier existe
+if [ ! -f "$FILE" ]; then
+  echo "❌ ERREUR : Fichier introuvable : $FILE"
+  exit 1
+fi
 
-# 3. VERIFICATION DE SECURITE CRITIQUE
-# On force le retrait du fichier secret s'il a été ajouté par erreur
-echo "3. Vérification de sécurité..."
-git rm --cached serviceAccountKey.json 2>/dev/null
-git rm --cached src/serviceAccountKey.json 2>/dev/null
+# Sauvegarde
+cp "$FILE" "${FILE}.bak"
+echo "📦 Sauvegarde créée : index.js.bak"
 
-# 4. Créer le premier commit propre
-echo "4. Création du nouveau commit initial..."
-git commit -m "Initial commit (Cleaned)"
+# Supprime l'ancien bloc sendNotification si déjà patché
+sed -i '' '/function sendNotification/,/}/d' "$FILE"
 
-# 5. Remplacer la branche main
-echo "5. Remplacement de la branche main..."
-git branch -D main   # Supprime l'ancienne main infectée
-git branch -m main   # Renomme la branche temporaire en main
+# Ajout du nouveau bloc sendNotification à la fin du fichier
+cat << 'EOF' >> "$FILE"
 
-# 6. Forcer l'envoi vers GitHub
-echo "6. Envoi forcé vers GitHub..."
-echo "Attention : Ceci va écraser l'historique sur GitHub."
-git push -f origin main
+//
+// ==================================================================
+// 🆕 VERSION PATCHÉE : ENVOI + SUPPRESSION DU MESSAGE FIRESTORE
+// ==================================================================
+//
 
-echo ""
-echo "======================================================"
-echo "✅ TERMINÉ !"
-echo "Ton projet est propre et débloqué."
-echo "======================================================"
+async function sendNotification(userId, data, messageId = null) {
+  try {
+    // 1. Récupérer token user
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      console.log(\`❌ User \${userId} introuvable en base.\`);
+      return;
+    }
+
+    const userData = userDoc.data();
+    const fcmToken = userData.fcmToken;
+
+    if (!fcmToken) {
+      console.log(\`⚠️ Le user \${userId} n'a pas de token FCM.\`);
+      return;
+    }
+
+    console.log(\`📡 Envoi d'une notif à \${userId} avec token : \${fcmToken}\`);
+
+    // 2. Envoi push
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: data.title || 'Notification',
+        body: data.body || ''
+      },
+      data: {
+        type: data.type || '',
+        fromUser: data.from || '',
+        toUser: data.to || '',
+        price: String(data.price || ''),
+        sender: data.sender || '',
+        content: data.content || ''
+      }
+    };
+
+    const response = await messaging.send(message);
+    console.log('✅ Notification envoyée ! ID:', response);
+
+    // 3. 🔥 SUPPRESSION DU MESSAGE FIRESTORE APRÈS PUSH
+    if (messageId) {
+      await db.collection('messages').doc(messageId).delete();
+      console.log('🗑 Message Firestore supprimé :', messageId);
+    }
+
+  } catch (error) {
+    console.error("❌ Erreur lors de l'envoi :", error);
+
+    // token expiré → suppression côté user
+    const code = error.code || error.errorInfo?.code;
+    if (code === 'messaging/registration-token-not-registered') {
+      console.warn('⚠️ Token expiré → suppression du token Firestore');
+      await db.collection('users').doc(userId).update({
+        fcmToken: admin.firestore.FieldValue.delete()
+      });
+    }
+  }
+}
+
+EOF
+
+echo "-----------------------------------------------------------"
+echo "🎉 Patch appliqué avec succès !"
+echo "👉 Pense à relancer ton serveur Node : node index.js"
+echo "-----------------------------------------------------------"

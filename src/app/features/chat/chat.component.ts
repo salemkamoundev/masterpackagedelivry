@@ -22,7 +22,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
             <div (click)="selectUser(user)" class="p-4 border-b border-gray-100 cursor-pointer hover:bg-white flex items-center gap-3" 
                  [class.bg-white]="selectedUser()?.uid === user.uid"
                  [class.bg-indigo-50]="selectedUser()?.uid === user.uid"> <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
-                 {{ (user.displayName || user.email) }}
+                 
               </div>
               <div class="overflow-hidden">
                  <p class="text-sm font-semibold truncate">{{ user.displayName || user.email }}</p>
