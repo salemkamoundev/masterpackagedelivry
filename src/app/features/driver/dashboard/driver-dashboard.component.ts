@@ -162,7 +162,7 @@ export class DriverDashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private tripService = inject(TripService);
   private carService = inject(CarService);
-  private notifService = inject(NotificationService);
+  private notifService: NotificationService = inject(NotificationService);
   private firestore = inject(Firestore);
   private fb = inject(FormBuilder);
   

@@ -1,0 +1,77 @@
+import { Injectable, inject } from '@angular/core';
+import { Messaging, getToken, onMessage } from '@angular/fire/messaging';
+import { Firestore, doc, setDoc } from '@angular/fire/firestore';
+import { AuthService } from '../auth/auth.service';
+import { environment } from '../../../environments/environment';
+import { filter, take } from 'rxjs/operators';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class MessagingService {
+  private messaging = inject(Messaging);
+  private firestore = inject(Firestore);
+  private authService = inject(AuthService);
+
+  constructor() {
+    this.init();
+  }
+
+  private init() {
+    // On attend qu'un utilisateur soit connecté
+    this.authService.user$
+      .pipe(
+        filter(user => !!user),
+        take(1)
+      )
+      .subscribe(user => {
+        console.log('👤 Utilisateur connecté, récupération du token FCM...');
+        if (user) { this.requestPermission(user.uid); }
+      });
+
+    // (Optionnel) écouter les messages quand l'app est au premier plan
+    onMessage(this.messaging, (payload) => {
+      console.log('📩 Notification reçue en foreground :', payload);
+    });
+  }
+
+  /** Demande la permission navigateur + récupère le token */
+  async requestPermission(userId: string) {
+    try {
+      const token = await getToken(this.messaging, {
+        // ⚠️ Mets ici ta VAPID key web (pas l’apiKey Firebase)
+        vapidKey: environment.firebase.vapidKey
+      });
+
+      if (!token) {
+        console.warn('⚠️ Aucun token reçu (permission refusée ou SW non dispo)');
+        return;
+      }
+
+      console.log('🔑 Token FCM récupéré :', token);
+      await this.saveToken(userId, token);
+    } catch (err) {
+      console.error('❌ Erreur lors de la récupération du token FCM :', err);
+    }
+  }
+
+  /** Enregistre / met à jour le token dans Firestore */
+  private async saveToken(userId: string, token: string) {
+    try {
+      const userRef = doc(this.firestore, `users/${userId}`);
+
+      await setDoc(
+        userRef,
+        {
+          fcmToken: token,
+          fcmTokenUpdatedAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 }
+        },
+        { merge: true }
+      );
+
+      console.log('✅ Token FCM enregistré dans Firestore pour user :', userId);
+    } catch (err) {
+      console.error('❌ Erreur lors de l’enregistrement du token FCM dans Firestore :', err);
+    }
+  }
+}

@@ -226,7 +226,7 @@ export class TripManagerComponent {
   private companyService = inject(CompanyService);
   private userService = inject(UserService);
   private chatService = inject(ChatService);
-  private notifService = inject(NotificationService);
+  private notifService: NotificationService = inject(NotificationService);
   private router = inject(Router);
   
   showForm = false;

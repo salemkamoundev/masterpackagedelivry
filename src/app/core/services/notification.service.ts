@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, NgZone } from '@angular/core';
 import { Firestore, collection, addDoc, query, where, onSnapshot, updateDoc, doc } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
@@ -16,7 +16,9 @@ export interface AppNotification {
 })
 export class NotificationService {
   private firestore = inject(Firestore);
+  private ngZone = inject(NgZone);
 
+  // Envoyer une notification
   async send(userId: string, message: string, type: 'INFO' | 'ALERT' | 'SUCCESS' = 'INFO') {
     const notif: AppNotification = {
       userId,
@@ -28,6 +30,7 @@ export class NotificationService {
     return addDoc(collection(this.firestore, 'notifications'), notif);
   }
 
+  // Écouter les notifications en temps réel
   getNotifications(userId: string): Observable<AppNotification[]> {
     return new Observable((observer) => {
       const q = query(
@@ -35,16 +38,31 @@ export class NotificationService {
         where('userId', '==', userId),
         where('read', '==', false)
       );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const notifs = snapshot.docs.map(d => ({ uid: d.id, ...d.data() } as AppNotification));
-        // Tri local simple
-        notifs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-        observer.next(notifs);
-      }, (error) => observer.error(error));
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          this.ngZone.run(() => {
+            const notifs = snapshot.docs.map(
+              (d) => ({ uid: d.id, ...d.data() } as AppNotification)
+            );
+
+            // Tri par date décroissante
+            notifs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+            observer.next(notifs);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => observer.error(error));
+        }
+      );
+
       return () => unsubscribe();
     });
   }
 
+  // Marquer une notification comme lue
   async markAsRead(notifId: string) {
     const ref = doc(this.firestore, 'notifications', notifId);
     await updateDoc(ref, { read: true });
